@@ -1,1 +1,1 @@
-# tsrp-scripts
+# tsrp-plugins
