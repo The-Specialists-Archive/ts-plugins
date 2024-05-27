@@ -1,0 +1,8 @@
+ Moved Permanently
+Server: AkamaiGHost
+Content-Length: 0
+Location: http://www.telegraph.co.uk/news/uknews/rss
+Date: Sun, 11 May 2014 12:19:04 GMT
+Connection: close
+
+

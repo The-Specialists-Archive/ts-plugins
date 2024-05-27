@@ -1,0 +1,29 @@
+//this is a comment, the plugin will ignore this line
+//sprites/advert/bs_taco.spr
+//origin -1635.000000 703.000000 254.000000
+//angles 0.000000 90.000000 0.000000
+//scale 1.600000
+
+//this is an animated sprite
+//sprites/advert/animation.spr
+//origin 907.000000 2078.000000 87.000000
+//angles 0.000000 990.000000 0.000000
+//scale 0.000000
+//framerate 12.0
+//how many frames per second?
+//framerate MUST be the last item
+
+//this is a model
+//models/wall.mdl
+//origin -1441.000000 -8.000000 173.000000
+//angles 0.000000 180.000000 0.000000
+//sprites/cur7/highlyf.spr
+
+models/cur7/hi.mdl
+origin -2669.460449 -2787.052978 794.755554
+angles 0.000000 269.999999 0.000000
+
+models/cur7/hi.mdl
+origin -2766.113281 -738.755920 279.534210
+angles 0.000000 179.999999 0.000000
+
