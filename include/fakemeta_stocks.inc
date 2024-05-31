@@ -1,4 +1,4 @@
-/* FakeMeta stocks
+/* Fakemeta stocks
 *
 * by the AMX Mod X Development Team
 *
@@ -155,7 +155,7 @@ stock EF_PrecacheEvent(type, const STRING[])
 	return engfunc(EngFunc_PrecacheEvent, type, STRING)
 stock EF_PlaybackEvent(flags, const INVOKER, eventindex, Float:delay, Float:origin[3], Float:angles[3], Float:fparam1, Float:fparam2, iparam1, iparam2, bparam1, bparam2)
 	return engfunc(EngFunc_PlaybackEvent, flags, INVOKER, eventindex, delay, origin, angles, fparam1, fparam2, iparam1, iparam2, bparam1, bparam2)
-stock EF_CheckVisibility(const ENTITY, set)
+stock EF_CheckVisibility(const ENTITY, set[])
 	return engfunc(EngFunc_CheckVisibility, ENTITY, set)
 
 stock EF_GetCurrentPlayer()
@@ -175,23 +175,13 @@ stock EF_WriteCoord(Float:value)
 	return engfunc(EngFunc_WriteCoord, value)
 stock EF_WriteAngle(Float:value)
 	return engfunc(EngFunc_WriteAngle, value)
-stock EF_InfoKeyValue(const INFOBUFFER, const KEY[], returnValue[], maxLength)
-	return engfunc(EngFunc_InfoKeyValue, INFOBUFFER, KEY, returnValue, maxLength)
-stock EF_SetKeyValue(const INFOBUFFER, const KEY[], const VALUE[])
-	return engfunc(EngFunc_SetKeyValue, INFOBUFFER, KEY, VALUE)
+stock EF_InfoKeyValue(const CLIENT, const KEY[], returnValue[], maxLength)
+	return engfunc(EngFunc_InfoKeyValue, CLIENT, KEY, returnValue, maxLength)
+stock EF_SetKeyValue(const BUFFER[], const KEY[], const VALUE[])
+	return engfunc(EngFunc_SetKeyValue, BUFFER, KEY, VALUE)
 
-stock EF_SetClientKeyValue(const ID, const INFOBUFFER, const KEY[], const VALUE[])
-	return engfunc(EngFunc_SetClientKeyValue, ID, INFOBUFFER, KEY, VALUE)
-
-stock EF_CreateInstBaseline(CLASSNAME, baseline)
-	return engfunc(EngFunc_CreateInstBaseline, CLASSNAME, baseline)
-
-// Returns pointer to info buffer that can be used with the INFOBUFFER param
-// of EF_InfoKeyValue, EF_SetKeyValue, and EF_SetClientKeyValue
-stock EF_GetInfoKeyBuffer(const ENTITY)
-	return engfunc(EngFunc_GetInfoKeyBuffer, ENTITY)
-stock EF_ClientPrintf(const ENTITY, const printType, const MESSAGE[])
-	return engfunc(EngFunc_ClientPrintf, ENTITY, printType, MESSAGE)
+stock EF_SetClientKeyValue(const ID, const KEY[], const VALUE[])
+	return engfunc(EngFunc_SetClientKeyValue, ID, KEY, VALUE)
 
 // DLLFuncs
 stock DF_GameInit()
@@ -200,10 +190,10 @@ stock DF_Spawn(const ENTITY)
 	return dllfunc(DLLFunc_Spawn, ENTITY)
 stock DF_Think(const ENTITY)
 	return dllfunc(DLLFunc_Think, ENTITY)
-stock DF_Use(const ENT_Used, const ENT_User)
-	return dllfunc(DLLFunc_Use, ENT_Used, ENT_User)
-stock DF_Touch(const ENT_Touched, const ENT_Toucher)
-	return dllfunc(DLLFunc_Touch, ENT_Touched, ENT_Toucher)
+stock DF_Use(const ENT_Used, const ENT_Other)
+	return dllfunc(DLLFunc_Use, ENT_Used, ENT_Other)
+stock DF_Touch(const ENT_Touched, const ENT_Other)
+	return dllfunc(DLLFunc_Touch, ENT_Touched, ENT_Other)
 
 stock DF_Blocked(const ENT_Blocked, const ENT_Other)
 	return dllfunc(DLLFunc_Blocked, ENT_Blocked, ENT_Other)
@@ -251,22 +241,11 @@ stock DF_RegisterEncoders()
 
 stock DF_GetHullBounds(hullnumber, Float:mins[3], Float:maxs[3])
 	return dllfunc(DLLFunc_GetHullBounds, hullnumber, mins, maxs)
-stock DF_CreateInstBaselines()
-	return dllfunc(DLLFunc_CreateInstBaselines)
+stock DF_CreateInstancedBaseline()
+	return dllfunc(DLLFunc_CreateInstancedBaseline)
 stock DF_pfnAllowLagCompensation()
 	return dllfunc(DLLFunc_pfnAllowLagCompensation)
 stock DF_MetaFunc_CallGameEntity(const STRING[], const ENTITY)
 	return dllfunc(MetaFunc_CallGameEntity, STRING, ENTITY)
 stock DF_ClientUserInfoChanged(const IDPLAYER)
 	return dllfunc(DLLFunc_ClientUserInfoChanged, IDPLAYER)
-	
-stock DF_UpdateClientData(const ENTITY, sendweapons, const cd = 0)
-	return dllfunc(DLLFunc_UpdateClientData, ENTITY, sendweapons, cd)
-stock DF_AddToFullPack(const STATE = 0, e, ENT, HOST, hostflags, player, set)
-	return dllfunc(DLLFunc_AddToFullPack, STATE, e, ENT, HOST, hostflags, player, set)
-stock DF_CmdStart(const PLAYER, const CMD = 0, randomSeed)
-	return dllfunc(DLLFunc_CmdStart, PLAYER, CMD, randomSeed)
-stock DF_CmdEnd(const PLAYER)
-	return dllfunc(DLLFunc_CmdEnd, PLAYER)
-stock DF_CreateBaseline(PLAYER, eIndex, baseline, playerModelIndex, Float:playerMins[3], Float:playerMaxs[3])
-	return dllfunc(DLLFunc_CreateBaseline, PLAYER, eIndex, baseline, playerModelIndex, playerMins, playerMaxs)

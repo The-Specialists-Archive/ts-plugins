@@ -35,6 +35,7 @@
 #include <amxmodx>
 #include <amxmisc>
 
+new g_cmdLoopback[16]
 new g_ResPtr
 new g_HidePtr
 
@@ -43,24 +44,31 @@ public plugin_init()
 	register_plugin("Slots Reservation", AMXX_VERSION_STR, "AMXX Dev Team")
 	register_dictionary("adminslots.txt")
 	register_dictionary("common.txt")
-	g_ResPtr = register_cvar("amx_reservation", "0")
-	g_HidePtr = register_cvar("amx_hideslots", "0")
+	g_ResPtr = register_cvar("amx_reservation", "1")
+	g_HidePtr = register_cvar("amx_hideslots", "1")
+	
+	format(g_cmdLoopback, 15, "amxres%c%c%c%c", random_num('A', 'Z'), random_num('A', 'Z'), random_num('A', 'Z'), random_num('A', 'Z'))
+	register_clcmd(g_cmdLoopback, "ackSignal")
 }
 
 public plugin_cfg()
 {
-	set_task(3.0, "MapLoaded")
-}
-
-public MapLoaded()
-{
 	if (!get_pcvar_num(g_HidePtr))
-		return
+		return PLUGIN_CONTINUE
 
 	new maxplayers = get_maxplayers()
 	new players = get_playersnum(1)
 	new limit = maxplayers - get_pcvar_num(g_ResPtr)
 	setVisibleSlots(players, maxplayers, limit)
+
+	return PLUGIN_CONTINUE
+}
+
+public ackSignal(id)
+{
+	new lReason[64]
+	format(lReason, 63, "%L", id, "DROPPED_RES")
+	server_cmd("kick #%d ^"%s^"", get_user_userid(id), lReason)
 }
 
 public client_authorized(id)
@@ -76,9 +84,7 @@ public client_authorized(id)
 		return PLUGIN_CONTINUE
 	}
 	
- 	new lReason[64]
- 	format(lReason, 63, "%L", id, "DROPPED_RES")
- 	server_cmd("kick #%d ^"%s^"", get_user_userid(id), lReason)
+	client_cmd(id, "%s", g_cmdLoopback)
 
 	return PLUGIN_HANDLED
 }

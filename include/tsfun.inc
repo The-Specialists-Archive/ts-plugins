@@ -20,14 +20,7 @@ enum {
   XMF_DEATH,
 }
 
-#if AMXX_VERSION_NUM >= 175
- #pragma reqlib tsfun
- #if !defined AMXMODX_NOAUTOLOAD
-  #pragma loadlib tsfun
- #endif
-#else
- #pragma library tsfun
-#endif
+#pragma library tsfun
 
 /************* Shared Natives End ********************************/
 

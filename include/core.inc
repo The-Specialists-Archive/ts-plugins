@@ -19,6 +19,8 @@ native getarg(arg, index=0);
 native setarg(arg, index=0, value);
 
 native strlen(const string[]);
+native strpack(dest[], const source[]);
+native strunpack(dest[], const source[]);
 
 native tolower(c);
 native toupper(c);

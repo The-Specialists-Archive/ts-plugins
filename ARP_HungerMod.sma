@@ -16,10 +16,11 @@ new p_HungerEnabled
 
 new g_Starving[33]
 new g_Eating[33]
+new Float:g_MaxSpeed[33]
 
 public ARP_Init()
 {
-	ARP_RegisterPlugin("Hunger Mod",ARP_VERSION,"The Apollo RP Team","Creates hunger-related items and settings")
+	ARP_RegisterPlugin("Hunger Mod",ARP_VERSION,"The ApolloRP Team","Creates hunger-related items and settings")
 	
 	p_HungerEnabled = register_cvar("arp_hunger_enabled","1")
 	
@@ -47,9 +48,9 @@ public CheckHunger()
 		
 		if(!g_Starving[id] && Hunger >= 75)
 		{					
+			g_MaxSpeed[id] = entity_get_float(id,EV_FL_maxspeed)
 			client_print(id,print_chat,"[ARP] You are starting to get very hungry.")
 			g_Starving[id] = 1
-			ARP_SetUserSpeed(id,Speed_Mul,0.75)
 		}
 		else if(g_Starving[id] == 1 && Hunger >= 90)
 		{
@@ -60,7 +61,7 @@ public CheckHunger()
 			g_Starving[id] = 1
 		else if(g_Starving[id] && Hunger < 75)
 		{
-			ARP_SetUserSpeed(id,Speed_Mul,1.0/0.75)
+			entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id])
 			g_Starving[id] = 0
 		}
 	}
@@ -86,7 +87,10 @@ public EventDeathMsg()
 	client_disconnect(read_data(2))
 
 public client_disconnect(id)
+{
 	g_Starving[id] = g_Eating[id] = 0
+	g_MaxSpeed[id] = 0.0
+}
 
 public ARP_Salary(id)
 {
@@ -119,9 +123,9 @@ public ARP_RegisterItems()
 	g_Steak = ARP_RegisterItem("Steak","_Food","A long well cooked piece of beef, heals 80 hunger.",1)
 }
 
-//public client_PreThink(id)
-//	if(g_Starving[id] || g_Eating[id])
-//		entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id] / (1.5 * (g_Starving[id] ? 1 : 0) + 1.5 * g_Eating[id]))
+public client_PreThink(id)
+	if(g_Starving[id] || g_Eating[id])
+		entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id] / (1.5 * (g_Starving[id] ? 1 : 0) + 1.5 * g_Eating[id]))
 
 public _Food(id,ItemId)
 {
@@ -171,8 +175,7 @@ public _Food(id,ItemId)
 	
 	client_print(id,print_chat,"[ARP] You are %s the %s.",Msg,ItemName)
 	
-	//if(!g_Starving[id]) g_MaxSpeed[id] = entity_get_float(id,EV_FL_maxspeed)
-	ARP_SetUserSpeed(id,Speed_Mul,0.5)
+	if(!g_Starving[id]) g_MaxSpeed[id] = entity_get_float(id,EV_FL_maxspeed)
 	g_Eating[id] = 1
 	
 	ARP_ItemSet(id)
@@ -206,14 +209,14 @@ public Eat(CurArray[4])
 		
 		ARP_ItemDone(id)
 		
+		entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id])
+		
 		if(g_Starving[id])
 			switch(Hunger)
 			{
 				case 75 .. 90 : g_Starving[id] = 1
 				case 0 .. 74 : g_Starving[id] = 0
 			}
-		
-		ARP_SetUserSpeed(id,Speed_Mul,2.0)
 		
 		g_Eating[id] = 0
 	}

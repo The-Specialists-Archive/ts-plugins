@@ -35,9 +35,8 @@
 #include <amxmodx>
 #include <amxmisc>
 
-
 new g_Answer[128]
-new g_optionName[4][64]
+new g_optionName[4][32]
 new g_voteCount[4]
 new g_validMaps
 new g_yesNoVote
@@ -59,7 +58,7 @@ public plugin_init()
 	register_menucmd(register_menuid("Choose map: "), MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4, "voteCount")
 	register_menucmd(register_menuid("Kick "), MENU_KEY_1|MENU_KEY_2, "voteCount")
 	register_menucmd(register_menuid("Ban "), MENU_KEY_1|MENU_KEY_2, "voteCount")
-	register_menucmd(register_menuid("Vote: "), MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4, "voteCount")
+	register_menucmd(register_menuid("Vote: "), MENU_KEY_1|MENU_KEY_2, "voteCount")
 	register_menucmd(register_menuid("The result: "), MENU_KEY_1|MENU_KEY_2, "actionResult")
 	register_concmd("amx_votemap", "cmdVoteMap", ADMIN_VOTE, "<map> [map] [map] [map]")
 	register_concmd("amx_votekick", "cmdVoteKickBan", ADMIN_VOTE, "<name or #userid>")
@@ -82,20 +81,17 @@ public cmdCancelVote(id, level, cid)
 		get_user_authid(id, authid, 31)
 		get_user_name(id, name, 31)
 		log_amx("Vote: ^"%s<%d><%s><>^" cancel vote session", name, get_user_userid(id), authid)
-	
-
-		new maxpl=get_maxplayers();
-		new msg[256];
-		for (new i = 1; i <= maxpl; i++)
+		
+		new players[32], pnum, lTag[16], activity = get_cvar_num("amx_show_activity")
+		get_players(players, pnum, "c")
+		
+		for (new i = 0; i < pnum;i ++)
 		{
-			if (is_user_connected(i) && !is_user_bot(i))
+			format(lTag, 15, "%L", players[i], is_user_admin(id) ? "ADMIN" : "PLAYER")
+			switch (activity)
 			{
-				// HACK: ADMIN_CANC_VOTE_{1,2} keys were designed very poorly.  Remove all : and %s in it.
-				LookupLangKey(msg, charsmax(msg), "ADMIN_CANC_VOTE_1", i);
-				replace_all(msg, charsmax(msg), "%s", "");
-				replace_all(msg, charsmax(msg), ":", "");
-				trim(msg);
-				show_activity_id(i, id, name, msg);
+				case 2: client_print(players[i], print_chat, "%L", LANG_PLAYER, "ADMIN_CANC_VOTE_2", lTag, name)
+				case 1: client_print(players[i], print_chat, "%L", LANG_PLAYER, "ADMIN_CANC_VOTE_1", lTag)
 			}
 		}
 		
@@ -314,18 +310,22 @@ public cmdVoteMap(id, level, cid)
 	else
 		log_amx("Vote: ^"%s<%d><%s><>^" vote maps (map#1 ^"%s^") (map#2 ^"%s^") (map#3 ^"%s^") (map#4 ^"%s^")", name, get_user_userid(id), authid, g_optionName[0], g_optionName[1], g_optionName[2], g_optionName[3])
 
-	new maxpl=get_maxplayers();
-	new msg[256];
-	for (new i = 1; i <= maxpl; i++)
+	new lTag[16], activity = get_cvar_num("amx_show_activity")
+	
+	if (activity > 0)
 	{
-		if (is_user_connected(i) && !is_user_bot(i))
+		new players[32], pnum
+		
+		get_players(players, pnum, "c")
+		for (new i = 0; i < pnum; i++)
 		{
-			// HACK: ADMIN_VOTE_MAP_{1,2} keys were designed very poorly.  Remove all : and %s in it.
-			LookupLangKey(msg, charsmax(msg), "ADMIN_VOTE_MAP_1", i);
-			replace_all(msg, charsmax(msg), "%s", "");
-			replace_all(msg, charsmax(msg), ":", "");
-			trim(msg);
-			show_activity_id(i, id, name, msg);
+			format(lTag, 15, "%L", players[i], is_user_admin(id) ? "ADMIN" : "PLAYER")
+			
+			switch (activity)
+			{
+				case 2: client_print(players[i], print_chat, "%L", players[i], "ADMIN_VOTE_MAP_2", lTag, name)
+				case 1: client_print(players[i], print_chat, "%L", players[i], "ADMIN_VOTE_MAP_1", lTag)
+			}
 		}
 	}
 
@@ -365,18 +365,15 @@ public cmdVote(id, level, cid)
 	new quest[48]
 	read_argv(1, quest, 47)
 	
-	if (contain(quest, "sv_password") != -1 || contain(quest, "rcon_password") != -1)
+	if ((contain(quest, "sv_password") != -1) || (contain(quest, "rcon_password") != -1) || (contain(quest, "kick") != -1) || 
+		(contain(quest, "addip") != -1) || (contain(quest, "ban") != -1))
 	{
 		console_print(id, "%L", id, "VOTING_FORBIDDEN")
 		return PLUGIN_HANDLED
 	}
 	
-	new count=read_argc();
-
-	for (new i=0;i<4 && (i+2)<count;i++)
-	{
-		read_argv(i+2, g_optionName[i], sizeof(g_optionName[])-1);
-	}
+	read_argv(2, g_optionName[0], 31)
+	read_argv(3, g_optionName[1], 31)
 
 	new authid[32], name[32]
 	
@@ -384,50 +381,37 @@ public cmdVote(id, level, cid)
 	get_user_name(id, name, 31)
 	log_amx("Vote: ^"%s<%d><%s><>^" vote custom (question ^"%s^") (option#1 ^"%s^") (option#2 ^"%s^")", name, get_user_userid(id), authid, quest, g_optionName[0], g_optionName[1])
 
-	new maxpl=get_maxplayers();
-	new msg[256];
-	for (new i = 1; i <= maxpl; i++)
+	new activity = get_cvar_num("amx_show_activity")
+	
+	if (activity > 0)
 	{
-		if (is_user_connected(i) && !is_user_bot(i))
+		new players[32], pnum, lTag[16]
+		
+		get_players(players, pnum, "c")
+		for (new i = 0; i < pnum; i++)
 		{
-			// HACK: ADMIN_VOTE_CUS_{1,2} keys were designed very poorly.  Remove all : and %s in it.
-			LookupLangKey(msg, charsmax(msg), "ADMIN_VOTE_CUS_1", i);
-			replace_all(msg, charsmax(msg), "%s", "");
-			replace_all(msg, charsmax(msg), ":", "");
-			trim(msg);
-			show_activity_id(i, id, name, msg);
+			format(lTag, 15, "%L", players[i], is_user_admin(id) ? "ADMIN" : "PLAYER")
+			
+			switch (activity)
+			{
+				case 2: client_print(players[i], print_chat, "%L", players[i], "ADMIN_VOTE_CUS_2", lTag, name)
+				case 1: client_print(players[i], print_chat, "%L", players[i], "ADMIN_VOTE_CUS_1", lTag)
+			}
 		}
 	}
 
-	new menu_msg[512], lVote[16]
+	new menu_msg[256], lVote[16]
 	
 	format(lVote, 15, "%L", LANG_SERVER, "VOTE")
+	new keys = MENU_KEY_1|MENU_KEY_2
 	
-	count-=2;
-	if (count>4)
-	{
-		count=4;
-	}
-	// count now shows how many options were listed
-	new keys=0;
-	for (new i=0;i<count;i++)
-	{
-		keys |= (1<<i);
-	}
-	
-	new len=formatex(menu_msg, sizeof(menu_msg)-1, g_coloredMenus ? "\y%s: %s\w^n^n" : "%s: %s^n^n", lVote, quest);
-	
-	for (new i=0;i<count;i++)
-	{
-		len+=formatex(menu_msg[len], sizeof(menu_msg) - 1 - len ,"%d.  %s^n",i+1,g_optionName[i]);
-	}
+	format(menu_msg, 255, g_coloredMenus ? "\y%s: %s\w^n^n1.  %s^n2.  %s" : "%s: %s^n^n1.  %s^n2.  %s", lVote, quest, g_optionName[0], g_optionName[1])
 	g_execResult = false
 	
 	new Float:vote_time = get_cvar_float("amx_vote_time") + 2.0
 	
 	set_cvar_float("amx_last_voting", get_gametime() + vote_time)
 	g_voteRatio = get_cvar_float("amx_vote_ratio")
-	replace_all(quest,sizeof(quest)-1,"%","");
 	format(g_Answer, 127, "%s - %%s", quest)
 	show_menu(0, keys, menu_msg, floatround(vote_time), "Vote: ")
 	set_task(vote_time, "checkVotes", 99889988)
@@ -465,7 +449,7 @@ public cmdVoteKickBan(id, level, cid)
 	new arg[32]
 	read_argv(1, arg, 31)
 	
-	new player = cmd_target(id, arg, CMDTARGET_OBEY_IMMUNITY | CMDTARGET_ALLOW_SELF)
+	new player = cmd_target(id, arg, 1)
 	
 	if (!player)
 		return PLUGIN_HANDLED
@@ -490,28 +474,10 @@ public cmdVoteKickBan(id, level, cid)
 	format(menu_msg, 255, g_coloredMenus ? "\y%s %s?\w^n^n1.  %s^n2.  %s" : "%s %s?^n^n1.  %s^n2.  %s", lKickBan, arg, lYes, lNo)
 	g_yesNoVote = 1
 	
-	new bool:ipban=false;
-	
 	if (voteban)
-	{
-		get_user_authid(player, g_optionName[0], sizeof(g_optionName[])-1);
-		
-		// Do the same check that's in plmenu to determine if this should be an IP ban instead
-		if (equal("4294967295", g_optionName[0])
-			|| equal("HLTV", g_optionName[0])
-			|| equal("STEAM_ID_LAN", g_optionName[0])
-			|| equali("VALVE_ID_LAN", g_optionName[0]))
-		{
-			get_user_ip(player, g_optionName[0], sizeof(g_optionName[])-1, 1);
-			
-			ipban=true;
-		}
-
-	}
+		get_user_authid(player, g_optionName[0], 31)
 	else
-	{
 		num_to_str(get_user_userid(player), g_optionName[0], 31)
-	}
 	
 	new authid[32], name[32]
 	
@@ -519,21 +485,22 @@ public cmdVoteKickBan(id, level, cid)
 	get_user_name(id, name, 31)
 	log_amx("Vote: ^"%s<%d><%s><>^" vote %s (target ^"%s^")", name, get_user_userid(id), authid, voteban ? "ban" : "kick", arg)
 
-	new maxpl=get_maxplayers();
-	new msg[256];
-	new right[256];
-	new dummy[1];
-	for (new i = 1; i <= maxpl; i++)
+	new activity = get_cvar_num("amx_show_activity")
+	if (activity > 0)
 	{
-		if (is_user_connected(i) && !is_user_bot(i))
+		new players[32], pnum, lTag[16]
+		
+		get_players(players, pnum, "c")
+		for (new i = 0; i < pnum; i++)
 		{
-			formatex(lKickBan, charsmax(lKickBan), "%L", i, voteban ? "BAN" : "KICK");
+			format(lTag, 15, "%L", players[i], is_user_admin(id) ? "ADMIN" : "USER")
+			format(lKickBan, 15, "%L", players[i], voteban ? "BAN" : "KICK")
 			
-			// HACK: ADMIN_VOTE_FOR{1,2} keys are really weird.  Tokenize and ignore the text before the :
-			LookupLangKey(msg, charsmax(msg), "ADMIN_VOTE_FOR_1", i);
-			strtok(msg, dummy, 0, right, charsmax(right), ':');
-			trim(right);
-			show_activity_id(i, id, name, right, lKickBan, arg);
+			switch (activity)
+			{
+				case 2: client_print(players[i], print_chat, "%L", players[i], "ADMIN_VOTE_FOR_2", lTag, name, lKickBan, arg)
+				case 1: client_print(players[i], print_chat, "%L", players[i], "ADMIN_VOTE_FOR_1", lTag, lKickBan, arg)
+			}
 		}
 	}
 
@@ -543,23 +510,7 @@ public cmdVoteKickBan(id, level, cid)
 	
 	set_cvar_float("amx_last_voting", get_gametime() + vote_time)
 	g_voteRatio = get_cvar_float(voteban ? "amx_voteban_ratio" : "amx_votekick_ratio")
-
-	if (voteban)
-	{
-		if (ipban==true)
-		{
-			g_Answer = "addip 30.0 %s";
-		}
-		else
-		{
-			g_Answer = "banid 30.0 %s kick";
-
-		}
-	}
-	else
-	{
-		g_Answer = "kick #%s";
-	}
+	g_Answer = voteban ? "banid 30.0 %s kick" : "kick #%s"
 	show_menu(0, keys, menu_msg, floatround(vote_time), voteban ? "Ban " : "Kick ")
 	set_task(vote_time, "checkVotes", 99889988)
 	g_voteCaller = id

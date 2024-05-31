@@ -466,3 +466,27 @@
 #define HLW_SNARK			15
 #define HLW_SUIT			31
 #define HLW_ALLWEAPONS			(~(1<<HLW_SUIT))
+
+
+#define FEV_NOTHOST		(1<<0)	// Skip local host for event send.
+#define FEV_RELIABLE	(1<<1)	// Send the event reliably.  You must specify the origin and angles 
+								// for this to work correctly on the server for anything
+								// that depends on the event origin/angles.  I.e., the origin/angles are not
+								// taken from the invoking edict for reliable events.
+#define FEV_GLOBAL		(1<<2)	// Don't restrict to PAS/PVS, send this event to _everybody_ on the server ( useful for stopping CHAN_STATIC
+								//  sounds started by client event when client is not in PVS anymore ( hwguy in TFC e.g. ).
+#define FEV_UPDATE		(1<<3)	// If this client already has one of these events in its queue, just update the event instead of sending it as a duplicate
+#define	FEV_HOSTONLY	(1<<4)	// Only send to entity specified as the invoker
+#define FEV_SERVER		(1<<5)	// Only send if the event was created on the server.
+#define FEV_CLIENT		(1<<6)	// Only issue event client side ( from shared code )
+
+// These are caps bits to indicate what an object's capabilities (currently used for save/restore and level transitions)
+#define		FCAP_CUSTOMSAVE				0x00000001
+#define		FCAP_ACROSS_TRANSITION		0x00000002		// should transfer between transitions
+#define		FCAP_MUST_SPAWN				0x00000004		// Spawn after restore
+#define		FCAP_DONT_SAVE				0x80000000		// Don't save this
+#define		FCAP_IMPULSE_USE			0x00000008		// can be used by the player
+#define		FCAP_CONTINUOUS_USE			0x00000010		// can be used by the player
+#define		FCAP_ONOFF_USE				0x00000020		// can be used by the player
+#define		FCAP_DIRECTIONAL_USE		0x00000040		// Player sends +/- 1 when using (currently only tracktrains)
+#define		FCAP_MASTER					0x00000080		// Can be used to "master" other entities (like multisource)

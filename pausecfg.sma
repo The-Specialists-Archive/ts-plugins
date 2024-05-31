@@ -57,7 +57,7 @@ public plugin_init()
 	register_dictionary("common.txt")
 	register_dictionary("admincmd.txt")
 	
-	register_concmd("amx_pausecfg", "cmdPlugin", ADMIN_CFG, "- list commands for pause/unpause management")
+	register_concmd("amx_pausecfg", "cmdPlugin", ADMIN_CFG, "- list commands for pause/unpause managment")
 	register_clcmd("amx_pausecfgmenu", "cmdMenu", ADMIN_CFG, "- pause/unpause plugins with menu")
 #if defined DIRECT_ONOFF
 	register_concmd("amx_off", "cmdOFF", ADMIN_CFG, "- pauses some plugins")
@@ -142,23 +142,16 @@ public actionMenu(id, key)
 			
 			switch (status[0])
 			{
-				// "running"
 				case 'r': pause("ac", file)
-				
-				// "debug"
-				case 'd': pause("ac", file)
-				
-				// "paused"
 				case 'p':
 				{
 					g_Modified = 1
-					unpause("ac", file)
+					pause("dc", file)
 				}
-				
-				// "stopped"
 				case 's':
 				{
-					client_print(id, print_chat, "%L", id, "CANT_UNPAUSE_PLUGIN", file);
+					g_Modified = 1
+					unpause("ac", file)
 				}
 			}
 			
@@ -173,35 +166,21 @@ getStatus(id, code, &statusCode, lStatus[], lLen)
 {
 	switch (code)
 	{
-		// "running"
 		case 'r':
 		{
 			statusCode = 'O'
 			format(lStatus, lLen, "%L", id, "ON")
 		}
-		
-		// "debug"
-		case 'd':
-		{
-			statusCode = 'O'
-			format(lStatus, lLen, "%L", id, "ON")
-		}
-		
-		// "stopped"
 		case 's':
 		{
 			statusCode = 'S'
 			format(lStatus, lLen, "%L", id, "STOPPED")
 		}	
-		
-		// "paused"
 		case 'p':
 		{
 			statusCode = 'O'
 			format(lStatus, lLen, "%L", id, "OFF")
 		}
-		
-		// "bad load"
 		case 'b':
 		{
 			statusCode = 'E'
@@ -260,8 +239,8 @@ displayMenu(id, pos)
 		}
 	}
 	
-	len += format(menu_body[len], 511-len, "^n7. %L^n", id, "CLEAR_PAUSED")
-	len += format(menu_body[len], 511-len, g_coloredMenus ? "8. %L \y\R%s^n\w" : "8. %L %s^n", id, "SAVE_PAUSED", g_Modified ? "*" : "")
+	len += format(menu_body[len], 511-len, "^n7. %L^n", id, "CLEAR_STOPPED")
+	len += format(menu_body[len], 511-len, g_coloredMenus ? "8. %L \y\R%s^n\w" : "8. %L %s^n", id, "SAVE_STOPPED", g_Modified ? "*" : "")
 
 	if (end != datanum)
 	{
@@ -329,11 +308,7 @@ findPluginByFile(arg[32], &len)
 	{
 		get_plugin(a, name, 31, title, 31, status, 0, status, 0, status, 1)
 		
-		if (equali(name, arg, len) && (
-			status[0] == 'r' ||	/*running*/
-			status[0] == 'p' ||	/*paused*/
-			status[0] == 's' ||	/*stopped*/
-			status[0] == 'd' ))	/*debug*/
+		if (equali(name, arg, len) && (status[0] == 'r' || status[0] == 'p' || status[0] == 's'))
 		{
 			len = copy(arg, 31, name)
 			return a
@@ -421,21 +396,10 @@ public cmdPlugin(id, level, cid)
 	{
 		new arg[32], a, len = read_argv(2, arg, 31)
 		
-		if (len && (a = findPluginByFile(arg, len)) != -1 && !isSystem(a))
-		{
-			if (unpause("ac", arg))
-			{
-				console_print(id, "%L %L", id, "PAUSE_PLUGIN_MATCH", arg, id, "UNPAUSED")
-			}
-			else
-			{
-				console_print(id, "%L", id, "CANT_UNPAUSE_PLUGIN", arg)
-			}
-		}
+		if (len && (a = findPluginByFile(arg, len)) != -1 && !isSystem(a) && unpause("ac", arg))
+			console_print(id, "%L %L", id, "PAUSE_PLUGIN_MATCH", arg, id, "UNPAUSED")
 		else
-		{
 			console_print(id, "%L", id, "PAUSE_COULDNT_FIND", arg)
-		}
 	}
 	else if (equal(cmds, "stop"))
 	{
@@ -499,8 +463,8 @@ public cmdPlugin(id, level, cid)
 		console_print(id, "%L", id, "COM_PAUSE_STOP")
 		console_print(id, "%L", id, "COM_PAUSE_PAUSE")
 		console_print(id, "%L", id, "COM_PAUSE_ENABLE")
-		console_print(id, "%L", id, "COM_PAUSE_SAVE_PAUSED")
-		console_print(id, "%L", id, "COM_PAUSE_CLEAR_PAUSED")
+		console_print(id, "%L", id, "COM_PAUSE_SAVE")
+		console_print(id, "%L", id, "COM_PAUSE_CLEAR")
 		console_print(id, "%L", id, "COM_PAUSE_LIST")
 		console_print(id, "%L", id, "COM_PAUSE_ADD")
 	}
@@ -523,8 +487,7 @@ saveSettings(filename[])
 	{
 		get_plugin(a, file, 31, title, 31, status, 0, status, 0, status, 1)
 		
-		// "paused"
-		if (status[0] == 'p')
+		if (status[0] == 's')
 		{
 			format(text, 255, "^"%s^" ;%s", title, file)
 			write_file(filename, text)
@@ -544,7 +507,7 @@ loadSettings(filename[])
 	while (read_file(filename, pos++, name, 255, i))
 	{
 		if (name[0] != ';' && parse(name, name, 31) && (i = findPluginByTitle(name, file, 31) != -1))
-			pause("ac", file)
+			pause("dc", file)
 	}
 	
 	return 1

@@ -11,18 +11,11 @@
 
 #include <csstats>
 
-#if AMXX_VERSION_NUM >= 175
- #pragma reqclass xstats
- #if !defined AMXMODX_NOAUTOLOAD
-  #pragma defclasslib xstats csx
- #endif
-#else
- #pragma library csx
-#endif
+#pragma library csx
 
 /*
- * Forwards
- */
+* Forwards
+*/
 
 /* Function is called after player to player attacks ,
 * if players were damaged by teammate TA is set to 1 */

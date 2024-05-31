@@ -1,6 +1,5 @@
 #include <amxmodx>
 #include <amxmisc>
-#include <engine>
 #include <ApolloRP>
 #include <sqlx>
 
@@ -76,58 +75,20 @@ new g_ItemsTable[64] = "arp_items"
 new g_DefaultDataTable[64] = "arp_data"
 new g_DataTable[64] = "arp_data"
 
-new p_BackupDatabase
-
-new g_BackupName[33]
-new g_BackupQueries
-new g_TotalBackupQueries
-
 public plugin_init()
 {	
 	register_clcmd("arp_config","CmdConfig")
-	register_srvcmd("arp_delete","CmdDelete")
-	register_srvcmd("arp_query","CmdQuery")
-	register_srvcmd("arp_backup","CmdBackup")
-	register_srvcmd("arp_restore","CmdRestore")
 	
 	register_clcmd("say","CmdSay")
 	register_clcmd("say_team","CmdSay")
-	
-	ARP_RegisterCmd("arp_getinfo","CmdGetInfo","<ADMIN> - gets all current info")
 	
 	register_menucmd(register_menuid(g_MainMenu),g_Keys,"HandleCmdConfig")
 	register_menucmd(register_menuid(g_DbMenu),g_Keys,"HandleDbMenu")
 	
 	new ConfigsDir[64]
 	get_configsdir(ConfigsDir,63)
-	
-	p_BackupDatabase = register_cvar("arp_sql_backup_db","backup")
 
 	format(g_LocalSqlFile,63,"%s/%s",ConfigsDir,g_LocalSqlFile)
-}
-
-public CmdGetInfo(id)
-{
-	if(!ARP_AdminAccess(id))
-		return PLUGIN_HANDLED
-	
-	new Float:fOrigin[3], Float:fAngles[3],iOrigin[3]
-	entity_get_vector(id,EV_VEC_origin,fOrigin)
-	entity_get_vector(id,EV_VEC_angles,fAngles)
-	FVecIVec(fOrigin,iOrigin)
-	
-	new Access[27],JobRights[27]
-	ARP_IntToAccess(ARP_GetUserAccess(id),Access,charsmax(Access))
-	ARP_IntToAccess(ARP_GetUserJobRight(id),JobRights,charsmax(JobRights))
-	
-	console_print(id,"Origin: %d %d %d",iOrigin[0],iOrigin[1],iOrigin[2])
-	console_print(id,"Angles: %d %d %d (%0.1f %0.1f %0.1f)",floatround(fAngles[0] / 45.0) * 45,floatround(fAngles[1] / 45.0) * 45,floatround(fAngles[2] / 45.0) * 45,fAngles[0],fAngles[1],fAngles[2])
-	entity_get_vector(id,EV_VEC_v_angle,fAngles)
-	console_print(id,"View Angles: %d %d %d (%0.1f %0.1f %0.1f)",floatround(fAngles[0] / 45.0) * 45,floatround(fAngles[1] / 45.0) * 45,floatround(fAngles[2] / 45.0) * 45,fAngles[0],fAngles[1],fAngles[2])
-	console_print(id,"Access flags: %s",Access)
-	console_print(id,"Job rights: %s",JobRights)
-	
-	return PLUGIN_HANDLED
 }
 
 public ARP_Init()
@@ -150,371 +111,6 @@ public ARP_Error(const Reason[])
 
 //public ARP_Init()
 	//fnFirstSet()
-
-public CmdRestore()
-{
-	if(IsOffline())
-	{
-		server_print("The SQL database is currently disconnected.")
-		return
-	}
-	
-	if(g_BackupQueries)
-	{
-		server_print("There is already a restore in progress.")
-		return
-	}
-	
-	server_print("** NOTE ** YOU MUST RUN arp_delete BEFORE USING THIS COMMAND ** NOTE **")
-	
-	read_args(g_BackupName,32)
-	trim(g_BackupName)
-	remove_quotes(g_BackupName)
-	
-	if(!strlen(g_BackupName))
-	{
-		server_print("You must input a backup name")
-		return
-	}
-	
-	if(containi(g_BackupName,"_") != -1)
-	{
-		server_print("Your backup name cannot contain underscores (_).")
-		return
-	}
-	
-	switch(ARP_SqlMode())
-	{
-		case MYSQL:
-		{
-			new Database[64]
-			get_pcvar_string(p_BackupDatabase,Database,63)
-			
-			format(g_Query,4095,"SHOW TABLES IN %s",Database)
-		}
-		case SQLITE:
-		{
-			server_print("This option is not available on SQLite servers. The database file is located in ./amxmodx/data/sqlite3/ and can be copied for backup purposes.")
-			return
-		}
-	}
-
-	ARP_CleverQuery(g_SqlHandle,"RestoreQueryHandle",g_Query)
-}
-
-public RestoreQueryHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-	{		
-		SQL_QueryError(Query,g_Query,4095)
-		
-		server_print("Error: %s",g_Query)
-	}	
-	if(Errcode)
-		log_amx("Error on query: %s",Error)
-	
-	new Table[64],Database[64],BackupName[64],Len
-	copy(BackupName,63,g_BackupName)
-	add(BackupName,63,"_")
-	
-	get_pcvar_string(p_BackupDatabase,Database,63)
-	
-	while(SQL_MoreResults(Query))
-	{		
-		SQL_ReadResult(Query,0,Table,63)
-		SQL_NextRow(Query)
-		
-		Len = strlen(Table)
-		if(Table[Len - 1] == '_')
-			Table[Len - 1] = '^0'
-		
-		replace(Table,63,BackupName,"")
-		
-		format(g_Query,4095,"CREATE TABLE %s AS SELECT * FROM %s.%s_%s",Table,Database,g_BackupName,Table)
-		
-		server_print("Restoring table %s from %s_%s",Table,g_BackupName,Table)
-		
-		SQL_ThreadQuery(g_SqlHandle,"RestoreTableQueryHandle",g_Query)
-		
-		g_BackupQueries++
-	}
-	
-	g_TotalBackupQueries = g_BackupQueries
-	server_print("%d restore queries queued",g_BackupQueries)
-	
-	return PLUGIN_CONTINUE
-}
-
-public RestoreTableQueryHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-	{		
-		SQL_QueryError(Query,g_Query,4095)
-		
-		server_print("Error: %s",g_Query)
-	}	
-	if(Errcode)
-		log_amx("Error on query: %s",Error)
-	
-	server_print("%d/%d tables restored",g_TotalBackupQueries - --g_BackupQueries,g_TotalBackupQueries)
-	
-	if(!g_BackupQueries)
-		server_print("Restore ^"%s^" complete",g_BackupName)
-	
-	return PLUGIN_CONTINUE
-}
-
-public CmdBackup()
-{
-	if(IsOffline())
-	{
-		server_print("The SQL database is currently disconnected.")
-		return
-	}
-	
-	if(g_BackupQueries)
-	{
-		server_print("There is already a backup in progress.")
-		return
-	}
-	
-	read_args(g_BackupName,32)
-	trim(g_BackupName)
-	remove_quotes(g_BackupName)
-	
-	if(!strlen(g_BackupName))
-	{
-		server_print("You must input a backup name")
-		return
-	}
-	
-	if(containi(g_BackupName,"_") != -1)
-	{
-		server_print("Your backup name cannot contain underscores (_).")
-		return
-	}
-	
-	switch(ARP_SqlMode())
-	{
-		case MYSQL:
-			format(g_Query,4095,"SHOW TABLES")
-		case SQLITE:
-		{
-			server_print("This option is not available on SQLite servers. The database file is located in ./amxmodx/data/sqlite3/ and can be copied for backup purposes.")
-			return
-		}
-	}
-
-	ARP_CleverQuery(g_SqlHandle,"BackupQueryHandle",g_Query)
-}
-
-public BackupQueryHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-	{		
-		SQL_QueryError(Query,g_Query,4095)
-		
-		server_print("Error: %s",g_Query)
-	}	
-	if(Errcode)
-		log_amx("Error on query: %s",Error)
-	
-	new Table[64],Database[64]
-	get_pcvar_string(p_BackupDatabase,Database,63)
-	while(SQL_MoreResults(Query))
-	{		
-		SQL_ReadResult(Query,0,Table,63)
-		SQL_NextRow(Query)
-		
-		format(g_Query,4095,"CREATE TABLE %s.%s_%s AS SELECT * FROM %s",Database,g_BackupName,Table,Table)
-		
-		server_print("Backing up table %s to %s_%s",Table,g_BackupName,Table)
-		
-		SQL_ThreadQuery(g_SqlHandle,"BackupTableQueryHandle",g_Query)
-		
-		g_BackupQueries++
-	}
-	
-	g_TotalBackupQueries = g_BackupQueries
-	server_print("%d backup queries queued",g_BackupQueries)
-	
-	return PLUGIN_CONTINUE
-}
-
-public BackupTableQueryHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-	{		
-		SQL_QueryError(Query,g_Query,4095)
-		
-		server_print("Error: %s",g_Query)
-	}	
-	if(Errcode)
-		log_amx("Error on query: %s",Error)
-	
-	server_print("%d/%d tables backed up",g_TotalBackupQueries - --g_BackupQueries,g_TotalBackupQueries)
-	
-	if(!g_BackupQueries)
-		server_print("Backup ^"%s^" complete",g_BackupName)
-	
-	return PLUGIN_CONTINUE
-}
-	
-public CmdDelete()
-{
-	if(IsOffline())
-	{
-		server_print("The SQL database is currently disconnected.")
-		return
-	}
-	
-	read_args(g_BackupName,32)
-	trim(g_BackupName)
-	remove_quotes(g_BackupName)
-	
-	switch(ARP_SqlMode())
-	{
-		case MYSQL:
-		{
-			if(strlen(g_BackupName))
-			{
-				new Database[63]
-				get_pcvar_string(p_BackupDatabase,Database,63)
-				
-				format(g_Query,4095,"SHOW TABLES IN %s",Database)
-			}
-			else	
-				format(g_Query,4095,"SHOW TABLES")
-		}
-		case SQLITE:
-			format(g_Query,4095,"SELECT * FROM sqlite_master WHERE type='table'")
-	}
-	ARP_CleverQuery(g_SqlHandle,"DeleteQueryHandle",g_Query)
-}
-
-public CmdQuery()
-{
-	if(IsOffline())
-	{
-		server_print("The SQL database is currently disconnected.")
-		return
-	}
-	
-	read_args(g_Query,4095)
-	ARP_CleverQuery(g_SqlHandle,"UserQueryHandle",g_Query)
-}
-
-public UserQueryHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-	{		
-		SQL_QueryError(Query,g_Query,4095)
-		
-		server_print("Error: %s",g_Query)
-	}	
-	if(Errcode)
-		log_amx("Error on query: %s",Error)
-	
-	server_print("Query results...")
-	
-	new Buffer[256],i,NumColumns = SQL_NumColumns(Query),Column[33]
-	for(i = 0;i < NumColumns;i++)
-	{
-		SQL_FieldNumToName(Query,i,Column,32)
-		add(Buffer,255,Column)
-		add(Buffer,255," ")
-	}
-	
-	server_print("%s",Buffer)
-	
-	new Results = SQL_NumResults(Query)
-	while(Results && SQL_MoreResults(Query))
-	{
-		Buffer[0] = '^0'
-		
-		for(i = 0;i < NumColumns;i++)
-		{
-			SQL_ReadResult(Query,i,Column,32)
-			add(Buffer,255,Column)
-			add(Buffer,255," ")
-		}
-		
-		server_print("%s",Buffer)
-		
-		SQL_NextRow(Query)
-	}
-	
-	server_print("Results: %d - Affected rows: %d",Results,SQL_AffectedRows(Query))
-	
-	return PLUGIN_CONTINUE
-}
-
-public DeleteQueryHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-	{		
-		SQL_QueryError(Query,g_Query,4095)
-		
-		server_print("Error: %s",g_Query)
-	}	
-	if(Errcode)
-		log_amx("Error on query: %s",Error)
-	
-	new Table[64],Column = ARP_SqlMode() == SQLITE ? 1 : 0,Database[64],Len = strlen(g_BackupName),Flag
-	get_pcvar_string(p_BackupDatabase,Database,63)
-	
-	while(SQL_MoreResults(Query))
-	{
-		SQL_ReadResult(Query,Column,Table,63)
-		SQL_NextRow(Query)
-		
-		if(Len)
-		{
-			if(!equali(Table,g_BackupName,Len))
-				continue
-			
-			format(g_Query,4095,"DROP TABLE %s.%s;",Database,Table)
-		}
-		else
-			format(g_Query,4095,"DROP TABLE %s;",Table)
-		
-		Flag = 1
-		server_print("Dropping table %s",Table)
-		
-		ARP_CleverQuery(g_SqlHandle,"IgnoreHandle",g_Query)
-	}
-	
-	server_print("Done data deletion")
-	if(!Flag)
-		server_print("No tables matching backup name ^"%s^"",g_BackupName)
-	
-	return PLUGIN_CONTINUE
-}
-
-public IgnoreHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{
-	if(FailState == TQUERY_CONNECT_FAILED)
-		return log_amx("Could not connect to SQL database.")//set_fail_state("Could not connect to SQL database.")
-	else if(FailState == TQUERY_QUERY_FAILED)
-		return log_amx("Internal error: consult developer. Error: %s",Error)
-	
-	if(Errcode)
-		return log_amx("Error on query: %s",Error)
-	
-	return PLUGIN_CONTINUE
-}
 
 public CmdConfig(id)
 {	
@@ -734,11 +330,11 @@ LoadSQLFile(id)
 		replace_all(g_Query,4095,g_DefaultItemsTable,g_ItemsTable)
 		replace_all(g_Query,4095,g_DefaultDataTable,g_DataTable)
 		
-		SQL_ThreadQuery(g_SqlHandle,"LoadHandle",g_Query,Params,1)
+		SQL_ThreadQuery(g_SqlHandle,"IgnoreHandle",g_Query,Params,1)
 	}
 }
 
-public LoadHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
+public IgnoreHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 		return set_fail_state("Could not connect to SQL database.")

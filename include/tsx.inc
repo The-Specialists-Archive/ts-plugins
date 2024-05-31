@@ -10,7 +10,6 @@
 #define _tsx_included
 
 #include <tsstats>
-#include <engine>
 
 #pragma library tsx
 

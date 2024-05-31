@@ -132,14 +132,6 @@ new Float:g_MaxSpeed[33]
 new p_FillCost
 new p_ProfitFraction
 
-enum MODS
-{
-	HL = 0,
-	TS
-}
-
-new MODS:g_Mod
-
 public plugin_init()
 {
 	register_menucmd(register_menuid(g_EdekaMenu),g_Keys,"EdekaMenuHandle")
@@ -163,32 +155,6 @@ public plugin_init()
 	ARP_AddCommand("say /deposit","Deposit money if facing a banker")
 	
 	register_event("DeathMsg","EventDeathMsg","a")
-	
-	if(module_exists("tsfun") || module_exists("tsx")) g_Mod = TS
-	// No such module
-	else /*if(module_exists("svencoop")*/ g_Mod = HL
-}
-
-public plugin_natives()
-{
-    set_module_filter("ModuleFilter")
-    set_native_filter("NativeFilter")
-}
-
-public ModuleFilter(const Module[])
-{
-    if(equali(Module,"tsfun") || equali(Module,"tsx") || equali(Module,"xstats"))
-        return PLUGIN_HANDLED
-	
-    return PLUGIN_CONTINUE
-}
-
-public NativeFilter(const Name[],Index,Trap)
-{
-    if(!Trap)
-        return PLUGIN_HANDLED
-        
-    return PLUGIN_CONTINUE
 }
 
 public ARP_Error(const Reason[])
@@ -208,10 +174,10 @@ public ARP_Init()
 	{
 		fgets(File,Buffer,127)
 		
-		new End = strlen(Buffer) - 1
-		if(Buffer[0] == ';' || End <= 0)
+		if(Buffer[0] == ';')
 			continue
 		
+		new End = strlen(Buffer) - 1
 		if(Buffer[End] == '^n') Buffer[End] = '^0'
 		
 		if(containi(Buffer,"[END]") != -1)
@@ -773,9 +739,9 @@ public DoctorMenuHandle(id,Menu,Item)
 		if(ARP_CallEvent("Player_HealBegin",Data,1))
 			return
 		
-		g_MaxSpeed[id] = 1.0//entity_get_float(id,EV_FL_maxspeed)
+		g_MaxSpeed[id] = entity_get_float(id,EV_FL_maxspeed)
 		
-		ARP_SetUserSpeed(id,Speed_Override,0.1)
+		entity_set_float(id,EV_FL_maxspeed,0.1)
 		
 		set_task(1.0,"HealUser",id)
 		
@@ -818,8 +784,7 @@ public HealUser(id)
 		
 		set_rendering(id,kRenderFxNone,255,255,255,kRenderNormal,16)
 		
-		//entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id])
-		ARP_SetUserSpeed(id,Speed_None)
+		entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id])
 		g_MaxSpeed[id] = 0.0
 		
 		return
@@ -938,11 +903,8 @@ Gunshop(id,Ent)
 	Pos += format(Menu[Pos],Len - Pos,"ARP Gunshop^n^n")
 	for(new Count;Count < GUNSHOP_MODES;Count++)
 	{
-		if(g_Mod == TS || !equali(g_ModeNames[Count],"Fill Ammo"))
-		{
-			Pos += format(Menu[Pos],Len - Pos,"%d. %s^n",++Num,g_ModeNames[Count])
-			Keys |= (1<<Count)
-		}
+		Pos += format(Menu[Pos],Len - Pos,"%d. %s^n",++Num,g_ModeNames[Count])
+		Keys |= (1<<Count)
 	}
 	Pos += format(Menu[Pos],Len - Pos,"^n0. Exit")
 	
@@ -1000,8 +962,6 @@ GunshopMenuHandle2(id,Key)
 			ItemId = -1
 		case 3 :
 		{
-			if(g_Mod != TS) return
-			
 			new Cost = get_pcvar_num(p_FillCost),Money = ARP_GetUserWallet(id)
 			if(Cost > Money)
 			{
@@ -1144,15 +1104,14 @@ public GunshopUseMenuHandle(id,Menu,Item)
 		ARP_PropertySetProfit(Property,floatround(ARP_PropertyGetProfit(Property) + Cost * get_pcvar_float(p_ProfitFraction)))
 }
 
-//public client_PreThink(id)
-//	if(g_MaxSpeed[id])
-//		entity_set_float(id,EV_FL_maxspeed,0.1)
+public client_PreThink(id)
+	if(g_MaxSpeed[id])
+		entity_set_float(id,EV_FL_maxspeed,0.1)
 	
 public EventDeathMsg()
 {
 	new id = read_data(2)
-	//entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id])
-	ARP_SetUserSpeed(id,Speed_None)
+	entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id])
 	g_MaxSpeed[id] = 0.0
 }
 

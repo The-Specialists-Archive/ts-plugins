@@ -18,9 +18,10 @@ Shin, for the support and the scripting support.. (You dont suck)
 new piss_sprite
 
 new bathroom[33] = 1
+
 public plugin_init()
 {
-	register_plugin("Advanced Bathroom Mod","x.11","Knox")
+	register_plugin("Advanced Bathroom Mod","1.0","Knox")
 
 }
 public ARP_Init()
@@ -34,6 +35,8 @@ public plugin_precache()
 	precache_sound("piss/pissing.wav")
 	piss_sprite = precache_sound("sprites/plasma.spr")
 }
+
+// Called when player recieves his salary
 public ARP_Salary(id)
 {
 	bathroom[id] += 2
@@ -62,17 +65,15 @@ public CmdSay(id,Mode,Args[])
 		{
 			new ids[1]
 			ids[0]=id
-			//set_task(60.0,"make_pee")
+
 			set_task(0.1,"make_pee",1481+id,ids,1,"a",106)
 			emit_sound(id,CHAN_VOICE,"piss/pissing.wav",0.1,ATTN_NORM,0,PITCH_NORM)
-			bathroom[id] = 0
-			//set_task(60.0,"reset_effects")
-			//set_user_maxspeed(id,0.1)
-			//set_task(60.0,"remove_bathroom")
+			bathroom[id] -= 30
+
 		}
 		else
 		{
-			client_print(id,print_chat,"[Bathroom Mod] You're bladder is empty!")
+			client_print(id,print_chat,"[Bathroom Mod] You dont feel like you need to piss!")
 		}
 		return PLUGIN_HANDLED
 	}
@@ -88,23 +89,17 @@ public EventHudRender(Name[],Data[],Len)
 	ARP_AddHudItem(id,HUD_PRIM,0,"Bathroom: %i%",bathroom[id])
 }	
 
-public client_connect(id) // FINAL
+public client_connect(id)
 {
 	bathroom[id] = 0
 }
 
-public client_disconnect(id) // FINAL
+public client_disconnect(id) 
 {
 	bathroom[id] = 0
 }
-/*public remove_bathroom(id)
-{
-	bathroom[id] = 0
-}
-public reset_effects(id)
-{
-	set_user_maxspeed(id,320.0)
-}*/
+
+//Piss effects
 public sqrt(num)
 {
   new div = num

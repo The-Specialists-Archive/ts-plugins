@@ -21,6 +21,11 @@ new g_FwdKeyValue
 new g_PlayerModels[33][64]
 new g_PlayerModeled[33]
 
+/* User Messages */
+new g_msgDamage
+new g_msgDeathMsg
+new g_msgScoreInfo
+
 new g_LastTrace = 0
 
 VexdUM_Register()
@@ -29,7 +34,6 @@ VexdUM_Register()
 	register_forward(FM_EmitSound, 				"Hook_FM_EmitSound")
 	register_forward(FM_EmitAmbientSound,		"Hook_FM_EmitAmbientSound")
 	register_forward(FM_SetModel, 				"Hook_FM_SetModel")
-	register_forward(FM_TraceLine, 				"Hook_FM_TraceLine")
 	register_forward(FM_SetClientKeyValue,		"Hook_FM_SetClientKeyValue")
 	register_forward(FM_KeyValue, 				"Hook_FM_KeyValue")
 	register_forward(FM_Touch, 					"Hook_FM_Touch")
@@ -38,7 +42,21 @@ VexdUM_Register()
 	register_forward(FM_PlayerPreThink,			"Hook_FM_PlayerPreThink")
 	register_forward(FM_PlayerPostThink,		"Hook_FM_PlayerPostThink")
 	register_forward(FM_ClientUserInfoChanged,	"Hook_ClientUserInfoChanged")
+
+	// Only register the traceline forward if there actually is a plugin
+	// that needs it.  Otherwise this will mess with set_user_hitzones
 	
+	new pluginnum = get_pluginsnum();
+	for (new i = 0; i < pluginnum; i++)
+	{
+		if (plugin_flags(0, i) & AMX_FLAG_OLDFILE && 	// plugin is an AMX plugin being emulated
+			get_func_id("traceline", i) != -1)			// plugin needs traceline
+		{
+			register_forward(FM_TraceLine, 				"Hook_FM_TraceLine")
+			break;
+		}
+
+	}
 	/* Global Forwards */
 	g_FwdTouch = 			CreateMultiForwardEx("entity_touch", 		ET_STOP, FORWARD_ONLY_OLD, FP_CELL, FP_CELL)
 	g_FwdThink = 			CreateMultiForwardEx("entity_think", 		ET_STOP, FORWARD_ONLY_OLD, FP_CELL)
@@ -51,6 +69,11 @@ VexdUM_Register()
 	g_FwdTraceLine = 		CreateMultiForwardEx("traceline", 			ET_STOP, FORWARD_ONLY_OLD, FP_CELL)
 	g_FwdSetCliKeyValue =	CreateMultiForwardEx("setclientkeyvalue",	ET_STOP, FORWARD_ONLY_OLD, FP_CELL, FP_STRING, FP_STRING)
 	g_FwdKeyValue = 		CreateMultiForwardEx("keyvalue", 			ET_STOP, FORWARD_ONLY_OLD, FP_CELL)
+	
+	/* User Messages */
+	g_msgDamage = get_user_msgid("Damage")
+	g_msgDeathMsg = get_user_msgid("DeathMsg")
+	g_msgScoreInfo = get_user_msgid("ScoreInfo")
 }
 
 VexdUM_Natives()
@@ -73,6 +96,9 @@ VexdUM_Natives()
 	register_native("get_maxentities",		"__get_maxentities")
 	register_native("PointContents",		"__PointContents")
 	register_native("DispatchKeyValue",		"__DispatchKeyValue")
+	register_native("entity_use","__entity_use")
+	register_native("get_num_ents","__get_num_ents")
+	register_native("take_damage","__take_damage")
 	
 	if (g_ModType == MOD_CSTRIKE)
 	{
@@ -92,7 +118,7 @@ SetClientKeyValue(id, const key[], const value[])
 {
 	new buffer = engfunc(EngFunc_GetInfoKeyBuffer, id)
 	
-	return engfunc(EngFunc_SetClientKeyValue, buffer, key, value)
+	return engfunc(EngFunc_SetClientKeyValue, id, buffer, key, value)
 }
 
 GetClientKeyValue(id, const key[], value[], maxlen)
@@ -100,6 +126,90 @@ GetClientKeyValue(id, const key[], value[], maxlen)
 	new buffer = engfunc(EngFunc_GetInfoKeyBuffer, id)
 	
 	engfunc(EngFunc_InfoKeyValue, buffer, key, value, maxlen)
+}
+
+Death(victim, killer, weapon[64], hs)
+{
+	if(pev(victim,pev_takedamage) > DAMAGE_NO)
+	{
+		new inflictor = pev(killer,pev_owner)
+		if(pev(killer,pev_flags) & (FL_CLIENT | FL_FAKECLIENT))
+		{
+			if(equal(weapon,""))
+			{
+				pev(killer,pev_viewmodel2,weapon,63)
+				
+				replace(weapon,63,"models/v_","")
+				weapon[strlen(weapon) - 4] = '^0'
+			}
+		}
+		else if(inflictor > 0 && inflictor < get_maxplayers())
+		{
+			if(equal(weapon,""))
+			{
+				pev(killer,pev_viewmodel2,weapon,63)
+				
+				replace(weapon,63,"weapon_","")
+				replace(weapon,63,"monster_","")
+				replace(weapon,63,"func_","")
+			}
+			
+			if(inflictor == victim)
+			{
+				killer = victim
+			} else {
+				killer = inflictor
+			}
+		}
+		
+		message_begin(MSG_ALL,g_msgDeathMsg)
+		write_byte(killer)
+		write_byte(victim)
+		write_byte(hs)
+		write_string(weapon)
+		message_end()
+		
+		new vname[32],vauthid[32],vteam[32]
+		get_user_name(victim,vname,31)
+		get_user_authid(victim,vauthid,31)
+		get_user_team(victim,vteam,31)
+		
+		if(victim == killer)
+		{
+			log_message("^"%s<%i><%s><%s>^" killed self with ^"%s^"^n",vname,get_user_userid(victim),
+				vauthid,vteam,weapon)
+		}
+		else if(pev(killer,pev_flags) & (FL_CLIENT | FL_FAKECLIENT))
+		{
+			new kname[32],kauthid[32],kteam[32],team
+			get_user_name(killer,kname,31)
+			get_user_authid(killer,kauthid,31)
+			team = get_user_team(killer,kteam,31)
+			
+		 	log_message("^"%s<%i><%s><%s>^" killed ^"%s<%i><%s><%s>^" with ^"%s^"^n",kname,get_user_userid(killer),
+			 	kauthid,kteam,vname,get_user_userid(victim),vauthid,vteam,weapon)
+			
+			new Float:frags
+			pev(killer,pev_frags,frags)
+			set_pev(killer,pev_frags,frags+1.0)
+			
+			message_begin(MSG_ALL,g_msgScoreInfo)
+			write_byte(killer)
+			write_short(floatround(frags))
+			write_short(get_user_deaths(killer))
+			write_short(0)
+			write_short(team)
+			message_end()
+
+			pev(victim,pev_frags,frags)
+			set_pev(victim,pev_frags,frags+1.0)
+		} else {
+			log_message("^"%s<%i><%s><%s>^" killed by ^"%s^"^n",vname,get_user_userid(victim),vauthid,vteam,weapon)
+		}
+		
+		set_msg_block(g_msgDeathMsg,BLOCK_ONCE)
+		dllfunc(DLLFunc_ClientKill,victim)
+	}
 }
 
 public __is_entity(plid, num)
@@ -298,7 +408,7 @@ public __traceline_set_float(plid, num)
 		case TR_FL_flFraction:
 			set_tr2(g_LastTrace, TraceResult:TR_flFraction, fValue)
 		case TR_FL_flPlaneDist:
-			get_tr2(g_LastTrace, TraceResult:TR_flPlaneDist, fValue)
+			set_tr2(g_LastTrace, TraceResult:TR_flPlaneDist, fValue)
 		default:
 		{
 			log_error(AMX_ERR_NATIVE, "Invalid TR_ parameter")
@@ -440,6 +550,57 @@ public __DispatchKeyValue(plid, num)
 	return 1
 }
 
+public __entity_use(plid, num)
+{
+    new entUsed = get_param(1)
+    new entOther = get_param(2)
+    return dllfunc(DLLFunc_Use,entUsed,entOther)
+}
+
+public __get_num_ents(plid, num)
+{
+    return engfunc(EngFunc_NumberOfEntities)
+}
+
+public __take_damage(plid, num)
+{
+	new victim = get_param(1)
+	new attacker = get_param(2)
+	new Float:orig[3]
+	get_array_f(3,orig,3)
+	new Float:dmg = get_param_f(4)
+	new bit = get_param(5)
+	new wpnName[64]
+	get_string(6,wpnName,63)
+	new hs = get_param(7)
+	
+	if(pev(victim,pev_takedamage) > DAMAGE_NO)
+	{
+		set_pev(victim,pev_dmg_inflictor,attacker)
+		
+		new Float:olddmg
+		pev(victim,pev_dmg_take,olddmg)
+		set_pev(victim,pev_dmg_take,olddmg+dmg)
+		
+		message_begin(MSG_ONE, g_msgDamage, {0,0,0} , victim)
+		write_byte(0)
+		write_byte(floatround(olddmg+dmg))
+		write_long(bit)
+		write_coord(floatround(orig[0]))
+		write_coord(floatround(orig[1]))
+		write_coord(floatround(orig[2]))
+		message_end()
+		
+		new Float:health
+		pev(victim,pev_health,health)
+		if((dmg >= health) && (health > 0.0))
+		{
+			Death(victim,attacker,wpnName,hs)
+		} else {
+			set_pev(victim,pev_health,health-dmg)
+		}
+	}
+}
 
 /*********************************
  ***** HOOKS *********************

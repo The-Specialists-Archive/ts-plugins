@@ -35,9 +35,6 @@
 #include <amxmodx>
 #include <amxmisc>
 
-// Precache sounds from speech.ini - comment this line to disable
-#define PRECACHE_SPEECHINI
-
 /* Commands Menus */
 
 #define MAX_CMDS_LAYERS 3
@@ -72,7 +69,7 @@ new g_cmdMenuHelp[MAX_CMDS_LAYERS][] =
 
 /* End of Commands Menu */
 
-#define MAX_CMDS    64
+#define MAX_CMDS    32
 #define MAX_CVARS   48
 
 new g_cmdName[MAX_CMDS*MAX_CMDS_LAYERS][32]
@@ -87,12 +84,11 @@ new g_cvarCmdNum
 new g_cvarNum
 
 new g_menuPosition[33]
-new g_menuSelect[33][MAX_CMDS]
+new g_menuSelect[33][64]
 new g_menuSelectNum[33]
 new g_menuLayer[33]
 
 new g_coloredMenus
-
 
 public plugin_init()
 {
@@ -123,83 +119,6 @@ public plugin_init()
 
 	g_coloredMenus = colored_menus()
 }
-
-#if defined PRECACHE_SPEECHINI
-public plugin_precache( )
-{
-	new configsDir[64], config[64];
-	get_configsdir( configsDir, 63 );
-	formatex( config, 63, "%s/%s", configsDir, "speech.ini" );
-
-	new fp = fopen( config, "rt" );			// Read file as text
-
-	if ( ! fp )					// File doesn't exists
-		return 0;
-
-	new szText[256];
-	new line = 0;
-	new szName[32], szSound[128], sndExt[5];
-	new field1[32], field2[64], field3[64];
-	new fieldNums = 0;
-
-	while ( line < MAX_CMDS && ! feof( fp ) )	// Loop till MAX_CMDS or EOF
-	{
-		fgets( fp, szText, 255 );               // Store line content
-
-		/* Strips newline */
-		new len = strlen( szText );
-		if ( len != 0 && szText[len-1] == '^n' )		// len != 0 because if the last line of the file is empty, there's no newline
-			szText[--len] = 0;
-
-		if ( len == 0 || szText[0] == ';' || szText[0] == '/' )   // Line is empty or a comment
-			continue;
-
-		parse( szText, szName, 31, szSound, 127 );
-		fieldNums = parse( szSound, field1, 31, field2, 63, field3, 63 );
-		if ( fieldNums == 2 && field1[0] == 's' )							// .wav (spk)
-		{
-			copy( szSound, 127, field2 );
-			copy( sndExt, 4, ".wav" );
-		}
-		else if ( fieldNums == 3 && field1[0] == 'm' && ( field2[0] == 'p' || field2[0] == 'l' ) )	// .mp3 (mp3 play | mp3 loop)
-		{
-			copy( szSound, 127, field3 );
-			copy( sndExt, 4, ".mp3" );
-		}
-		else												// WTH is this sound, drop it.
-			continue;
-
-		replace_all( szSound, 127, "\'", "" );								// Strips all ugly (and sometimes useless) \'
-
-		if ( szSound[0] == '/' )
-				replace( szSound, 127, "/", "" );						// Strip leading slash
-
-		if ( sndExt[1] == 'm' || ( ! equali( szSound, "vox", 3 ) && ! equali( szSound, "fvox", 4 ) && ! equali( szSound, "barney", 6 ) && ! equali( szSound, "hgrunt", 6 ) ) )
-		{
-			// SzSound is a mp3, or a custom wav (not a vox, fvox, or default sound from HL pak)
-			if ( !equali( szSound[strlen(szSound)-4], sndExt ) )
-				add( szSound, 127, sndExt );			// Add filetype extension if it isn't already specified
-			if ( sndExt[1] == 'w' )
-				format( szSound, 127, "sound/%s", szSound );	// spk basedir is $moddir/sound, but mp3 play is $moddir, fix this for the file_exists check
-			if ( file_exists( szSound ) )
-			{
-				if ( sndExt[1] == 'm')
-				{
-					precache_generic( szSound );		// mp3
-				}
-				else
-				{
-					replace( szSound, 127, "sound/", "" );	// wav, strip the leading sound/ we added for our file_exists check
-					precache_sound( szSound );
-				}
-			}
-		}
-		line++
-	}
-	fclose( fp );								// Close file
-	return line;
-}
-#endif
 
 /* Commands menu */
 
@@ -240,9 +159,8 @@ displayCmdMenu(id, pos)
 
 	if (start >= g_menuSelectNum[id])
 		start = pos = g_menuPosition[id] = 0
-	
-	new limit = (g_menuSelectNum[id] / 8 + ((g_menuSelectNum[id] % 8)))
-	new len = format(menuBody, 511, g_coloredMenus ? "\y%L\R%d/%d^n\w^n" : "%L %d/%d^n^n", id, g_cmdMenuName[g_menuLayer[id]], pos + 1, (limit == 0) ? 1 : limit)
+
+	new len = format(menuBody, 511, g_coloredMenus ? "\y%L\R%d/%d^n\w^n" : "%L %d/%d^n^n", id, g_cmdMenuName[g_menuLayer[id]], pos + 1, (g_menuSelectNum[id] / 8 + ((g_menuSelectNum[id] % 8) ? 1 : 0)))
 	new end = start + 8
 	new keys = MENU_KEY_0
 
@@ -295,6 +213,7 @@ public cmdCmdMenu(id, level, cid)
 	}
 
 	g_menuLayer[id] = lvl
+	new flags = get_user_flags(id)
 	g_menuSelectNum[id] = 0
 
 	new a = lvl * MAX_CMDS
@@ -304,7 +223,7 @@ public cmdCmdMenu(id, level, cid)
 	{
 		d = a + c
 		
-		if (access(id, g_cmdMisc[d][0]))
+		if (g_cmdMisc[d][0] & flags)
 		{
 			g_menuSelect[id][g_menuSelectNum[id]++] = d
 		}
@@ -439,10 +358,11 @@ public cmdCvarMenu(id, level, cid)
 	if (!cmd_access(id, level, cid, 1))
 		return PLUGIN_HANDLED
 
+	new flags = get_user_flags(id)
 	g_menuSelectNum[id] = 0
 
 	for (new a = 0; a < g_cvarNum; ++a)
-		if (access(id, g_cvarMisc[a][0]))
+		if (g_cvarMisc[a][0] & flags)
 			g_menuSelect[id][g_menuSelectNum[id]++] = a
 
 	displayCvarMenu(id, g_menuPosition[id] = 0)

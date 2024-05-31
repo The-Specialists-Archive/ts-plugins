@@ -28,13 +28,6 @@ native delete_file(const file[]);
 /* Checks for file. If file exists function returns 1, in other case 0. */
 native file_exists(const file[]);
 
-/* renames a file.  returns 0 on failure, 1 on success.
- * if relative true, rename_file will act like other natives which 
- * use the moddir as a base directory.  otherwise, the current directory is 
- * undefined (but assumed to be hlds).
- */
-native rename_file(const oldname[], const newname[], relative=0);
-
 /* Checks if a directory exists */
 native dir_exists(const dir[]);
 
@@ -48,7 +41,7 @@ native file_size(const file[], flag=0);
 #define SEEK_CUR 1
 #define SEEK_END 2
 
-//Open a file, returns a handle or 0 on failure
+//Open a file, returns a handle or 0 on vailure
 native fopen(const filename[],const mode[]);
 
 //Closes a file handle
@@ -79,11 +72,8 @@ native feof(file);
 //Reads a line from a text file -- includes newline!
 native fgets(file, buffer[], maxlength);
 
-//Writes a line to a text file.  Returns # of characters written.
-native fputs(file, const text[]);
-
 //Writes a line to the file
-native fprintf(file, const fmt[], {Float,Sql,Result,_}:...);
+native fprintf(file, const fmt[], {Float,Sql,Result_}:...);
 
 //Sets the current position in a file (see SEEK_ values above)
 native fseek(file, position, start);
@@ -97,7 +87,7 @@ native fputc(file, data);
 native fungetc(file, data);
 
 //Return the size of a file
-native filesize(const filename[], {Float,Sql,Result,_}:...);
+native filesize(const filename[],{Float,Sql,Result,_}:...);
 
 //Attempts to remove a directory.
 //Note that you cannot remove a directory that has files on most
@@ -105,7 +95,7 @@ native filesize(const filename[], {Float,Sql,Result,_}:...);
 native rmdir(const path[]);
 
 //Delete a file (delete_file macro)
-native unlink(const filename[]);
+native unlink(const filename[],{Float,Sql,Result,_}:...);
 
 //Returns a handle to a directory
 native open_dir(dir[], firstfile[], length);

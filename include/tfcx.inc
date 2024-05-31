@@ -12,14 +12,7 @@
 #include <tfcconst>
 #include <tfcstats>
 
-#if AMXX_VERSION_NUM >= 175
- #pragma reqclass xstats
- #if !defined AMXMODX_NOAUTOLOAD
-  #pragma defclasslib xstats tfcx
- #endif
-#else
- #pragma library tfcx
-#endif
+#pragma library tfcx
 
 /************* Shared Natives Start ********************************/
 
@@ -119,17 +112,3 @@ native tfc_getweaponbammo(index, weapon);
 
 /* Sets amount of ammo in weapon's clip (backpack) */
 native tfc_setweaponbammo(index, weapon, value);
-
-/* Returns amount of ammo in weapon's clip */
-/* Index must be weapon's entity index */
-native tfc_getweaponammo(index);
-
-/* Sets amount of ammo in weapon's clip */
-/* Index must be weapon's entity index */
-native tfc_setweaponammo(index, value);
-
-/* Returns 1 if user is carrying a goal item such as a flag or a keycard, else 0.
- * Team is by reference parameter that will be set to owning team(s) of the goal item.
- * Use the TFC_GOALITEM_* constants to determine the owning team.
- */
-native tfc_get_user_goalitem(index, &team);

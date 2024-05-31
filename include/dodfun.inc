@@ -11,14 +11,8 @@
 
 #include <dodconst>
 
-#if AMXX_VERSION_NUM >= 175
- #pragma reqlib dodfun
- #if !defined AMXMODX_NOAUTOLOAD
-  #pragma loadlib dodfun
- #endif
-#else
- #pragma library dodfun
-#endif
+#pragma library dodfun
+
 
 /* Function is called after grenade throw */
 forward grenade_throw(index,greindex,wId);

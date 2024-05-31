@@ -9,12 +9,8 @@
 #include <fakemeta>
 #include <engine>
 #include <sqlx>
-#include <hamsandwich>
-//#include <tsx>
-//#include <tfcx>
 #include <ApolloRP>
 #include <xs>
-#include <tsfun>
 #if defined ARRAYX
 #include <arrayx_array>
 #else
@@ -57,11 +53,11 @@ new const g_PassCvar[] = "arp_sql_pass"
 new const g_DbCvar[] = "arp_sql_db"
 new const g_TypeCvar[] = "arp_sql_type"
 
-new g_Host[64] = "localhost"
-new g_User[64] = "root"
-new g_Pass[64] = ""
-new g_Db[64] = "arp"
-new g_Type[64] = "sqlite"
+new g_Host[64]
+new g_User[64]
+new g_Pass[64]
+new g_Db[64]
+new g_Type[64]
 
 new g_Authid[33][36]
 
@@ -128,8 +124,6 @@ new p_Performance
 new p_Log
 new p_GameName
 new p_Welcome[3]
-new p_HoverMessage
-//new p_CharacterSheet
 
 enum _:HUD_CVARS
 {
@@ -194,14 +188,12 @@ new g_PropertyNum
 new TravTrie:g_MenuArray[33]
 new g_MenuAccepting[33]
 
-//new TravTrie:g_Characters[33]
-
 new g_DoorArray
 new g_DoorNum
 
 new g_Joined[33]
 
-new Float:g_MaxSpeed[33]
+new g_FillModel[] = "models/pellet.mdl"
 
 new g_ConfigsDir[128]
 
@@ -209,22 +201,8 @@ new g_Version[] = ARP_VERSION
 
 new TravTrie:g_PluginTrie
 
-new TravTrie:g_SpeedTrie[33]
-new Float:g_SpeedOverride[33]
-new g_SpeedOverridePlugin[33]
-
-enum MODS
-{
-	HL = 0,
-	TS,
-	TFC,
-	CS
-}
-
-new MODS:g_Mod
-
 public plugin_init()
-{			
+{		
 	register_cvar("arp_version",g_Version,FCVAR_SERVER)
 	
 	register_menucmd(register_menuid(g_ItemsMenu),g_Keys,"ItemsHandle")
@@ -247,8 +225,7 @@ public plugin_init()
 	register_event("ResetHUD","EventResetHUD","b")
 	
 	register_forward(FM_Sys_Error,"plugin_end")
-	//register_forward(FM_GetGameDescription,"ForwardGetGameDescription")
-	register_forward(FM_SetClientMaxspeed,"ForwardSetClientMaxspeed")
+	register_forward(FM_GetGameDescription,"ForwardGetGameDescription")
 	
 	ARP_RegisterCmd("say /buy","CmdBuy","Allows you to buy properties you're looking at")
 	ARP_RegisterCmd("say /items","CmdItems","Shows your items and allows you to control them")
@@ -282,58 +259,10 @@ public plugin_init()
 	#endif
 	
 	set_task(1.0,"GodEnts")
-	
-	if(module_exists("tsfun") || module_exists("tsx")) g_Mod = TS
-	else if(module_exists("tfcx")) g_Mod = TFC
-	else if(module_exists("csx") || module_exists("cstrike")) g_Mod = CS
-	// No such module
-	else /*if(module_exists("svencoop")*/ g_Mod = HL
-	
-	if(g_Mod != TS && g_Mod != CS) 
-	{
-		new Mod[12]
-		get_modname(Mod,11)
-		
-		server_print("Apollo RP is optimized for The Specialists and Counter-Strike. Some functionality will be disabled to allow operation on ^"%s^".",Mod)
-	}
-	
-	//register_concmd("getclasses","CmdGetClasses")
-}
-
-#if 0
-public CmdGetClasses(id)
-{
-	new travTrieIter:Iter = GetTravTrieIterator(g_ClassArray),Cell,ClassHeader[64],Loaded,TravTrie:CurTrie,TravTrie:PluginTrie,Flag,ReadTable[64],Garbage[1]
-	while(MoreTravTrie(Iter))
-	{		
-		ReadTravTrieKey(Iter,ClassHeader,63)
-		ReadTravTrieCell(Iter,Cell)
-		
-		client_print(id,print_console,"ClassHeader:%s",ClassHeader)
-		server_print("ClassHeader:%s",ClassHeader)
-	}
-	DestroyTravTrieIterator(Iter)
-}
-#endif
-
-public ModuleFilter(const Module[])
-{
-    if(equali(Module,"tsfun") || equali(Module,"tsx") || equali(Module,"xstats") || equali(Module,"tfcx") || equali(Module,"cstrike") || equali(Module,"csx"))
-        return PLUGIN_HANDLED
-	
-    return PLUGIN_CONTINUE
-}
-
-public NativeFilter(const Name[],Index,Trap)
-{
-    if(!Trap)
-        return PLUGIN_HANDLED
-        
-    return PLUGIN_CONTINUE
 }
 
 public GodEnts()
-{	
+{
 	if(get_pcvar_num(p_GodDoors))
 	{
 		new Ent
@@ -542,8 +471,7 @@ public SaveData()
 		Access = array_get_int(CurArray,6)
 		Profit = array_get_int(CurArray,7)	
 		
-		ARP_SqlEscape(InternalName,63)
-		ARP_SqlEscape(ExternalName,63)
+		ARP_SqlEscape(ExternalName,32)
 		ARP_SqlEscape(OwnerName,32)
 		//replace_all(ExternalName,32,"'","\'")
 		//replace_all(OwnerName,32,"'","\'")
@@ -581,8 +509,6 @@ public SaveData()
 		#if defined DEBUG
 		g_TotalQueries++
 		#endif
-		
-		ARP_SqlEscape(InternalName,charsmax(InternalName))
 		
 		switch(g_SqlMode)
 		{
@@ -650,8 +576,8 @@ SaveUserItems(id)
 		//	Pos += format(Items[Pos],511,"%d|%d ",Id,Num)
 	}
 	
-	//if(g_PluginEnd)
-	//	array_destroy(g_UserItemArray[id])
+	if(g_PluginEnd)
+		array_destroy(g_UserItemArray[id])
 }
 
 public PlayerTouch(Touched,Toucher)
@@ -722,8 +648,8 @@ CheckTouched(Index)
 }
 
 public plugin_precache()
-{	
-	g_Plugin = register_plugin("ARP - Core",g_Version,"The Apollo RP Team")
+{
+	g_Plugin = register_plugin("ARP - Core",g_Version,"ARP Team")
 	
 	p_StartMoney = register_cvar("arp_startmoney","500")
 	p_ItemsPerPage = register_cvar("arp_items_per_page","30")
@@ -735,9 +661,7 @@ public plugin_precache()
 	p_AuxType = register_cvar("arp_hud4_type","1")
 	p_Performance = register_cvar("arp_performance","100")
 	p_Log = register_cvar("arp_log","1")
-	p_GameName = register_cvar("arp_gamename","")
-	p_HoverMessage = register_cvar("arp_hover_message","1")
-	//p_CharacterSheet = register_cvar("arp_character_sheet","1")
+	p_GameName = register_cvar("arp_gamename","The Specialists (RP)")
 	
 	p_Welcome[0] = register_cvar("arp_welcome_msg1","This server is running Apollo RP (http://ApolloRP.org).")
 	p_Welcome[1] = register_cvar("arp_welcome_msg2","Type ^"arp_help^" in your console to get started.")
@@ -792,6 +716,7 @@ public plugin_precache()
 	{
 		format(g_Query,sizeof g_Query - 1,"Configuration directory missing: %s",g_ConfigsDir)
 		UTIL_ARP_ThrowError(0,0,g_Query,0)
+		return
 	}
 
 	new File = fopen(ConfigFile,"r")
@@ -799,6 +724,7 @@ public plugin_precache()
 	{
 		format(g_Query,4095,"Could not open core config file (%s).",ConfigFile)
 		UTIL_ARP_ThrowError(0,0,g_Query,0)
+		return
 	}
 
 	LoadConfigFile(File)
@@ -810,6 +736,8 @@ public plugin_precache()
 		if(File)
 			LoadConfigFile(File)
 	}
+	
+	precache_model(g_FillModel)
 
 	if(file_exists(g_ItemModel))
 		precache_model(g_ItemModel)
@@ -817,6 +745,7 @@ public plugin_precache()
 	{
 		format(g_Query,sizeof g_Query - 1,"Item model missing: %s",g_ItemModel)
 		UTIL_ARP_ThrowError(0,0,g_Query,0)
+		return
 	}
 	
 	g_ItemsArray = array_create()
@@ -824,13 +753,10 @@ public plugin_precache()
 	for(new Count;Count < 33;Count++)
 	{
 		g_MenuArray[Count] = TravTrieCreate()
-		//g_Characters[Count] = TravTrieCreate()
 		g_UserItemArray[Count] = array_create()
 		for(new Count2;Count2 < HUD_NUM;Count2++)
 			g_HudArray[Count][Count2] = TravTrieCreate(256,_)
 		//g_HudArray[Count] = TravTrieCreate()
-		
-		g_SpeedTrie[Count] = TravTrieCreate()
 	}
 	
 	g_JobsArray = array_create()
@@ -934,19 +860,9 @@ public SqlInit()
 	g_SqlHandle = SQL_MakeDbTuple(g_Host,g_User,g_Pass,g_Db)
 	if(g_SqlHandle == Empty_Handle)
 	{
-		format(g_Query,4095,"Failed to create SQL tuple.")
-		UTIL_ARP_ThrowError(0,0,g_Query,0)
+		format(g_Query,4095,"Failed to create SQL tuple.",Type,g_Type)
+		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
-	
-	new ErrorCode,Handle:SqlConnection = SQL_Connect(g_SqlHandle,ErrorCode,g_Query,4095)
-	if(ErrorCode)
-	{
-		g_SqlHandle = Empty_Handle
-		format(g_Query,4095,"Could not connect to SQL database: %s", g_Query)
-		UTIL_ARP_ThrowError(0,0,g_Query,0)
-	}
-	
-	SQL_FreeHandle(SqlConnection)
 	
 	// one of the problems with the original harbu was authid not
 	// being 36 max chars. the max is really 36, not 32.
@@ -1041,6 +957,7 @@ public FetchProperties(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -1096,6 +1013,7 @@ public FetchDoors(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -1147,6 +1065,7 @@ public FetchJobs(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -1184,8 +1103,6 @@ public FetchJobs(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 
 public plugin_end()
 {	
-	server_cmd("totaltravtries")
-	
 	g_PluginEnd = 1
 	
 	SaveData()
@@ -1257,20 +1174,11 @@ public plugin_end()
 }
 		
 public client_disconnect(id)	
-{
 	if(g_GotInfo[id] >= STD_USER_QUERIES && !g_PluginEnd)
 	{
 		SaveUserData(id,1)
 		g_GotInfo[id] = 0
 	}
-	
-	g_SpeedOverride[id] = 0.0
-	g_SpeedOverridePlugin[id] = 0
-	
-	TravTrieClear(g_SpeedTrie[id])
-	
-	//g_DisplayCharacterMenu[id] = 0
-}
 
 public SaveUserData(id,Disconnected)
 {
@@ -1290,8 +1198,6 @@ public SaveUserData(id,Disconnected)
 	if(containi(g_Authid[id],"PENDING") != -1 || containi(g_Authid[id],"LAN") != -1 || equali(g_Authid[id],"STEAM_0:0") || containi(g_Authid[id],"UNKNOWN") != -1)
 		return
 	
-	ARP_SqlEscape(JobName,32)
-	
 	format(g_Query,4095,"UPDATE %s SET bankmoney='%d',wallet='%d',jobname='%s',hunger='%d',access='%s',jobright='%s' WHERE authid='%s'",g_UserTable,g_BankMoney[id],g_Money[id],JobName,g_Hunger[id],Access,JobRight,g_Authid[id])
 	
 	g_Saving[id] = 1
@@ -1302,6 +1208,7 @@ public SaveUserDataHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -1600,9 +1507,6 @@ public ItemsOptions(id,Key)
 				return
 			}
 			
-			new Name[33]
-			UTIL_ARP_GetItemName(g_CurItem[id],Name,32)
-			
 			new Data[2]
 			Data[0] = id
 			Data[1] = g_CurItem[id]
@@ -1807,24 +1711,6 @@ public client_PreThink(id)
 	if(!is_user_alive(id))
 		return
 	
-	if(g_SpeedOverridePlugin[id])
-		set_user_maxspeed(id,g_SpeedOverride[id])
-	else
-	{
-		new Float:NewSpeed = g_MaxSpeed[id],travTrieIter:Iter = GetTravTrieIterator(g_SpeedTrie[id]),Float:Mul,Flag
-		while(MoreTravTrie(Iter))
-		{
-			ReadTravTrieCell(Iter,Mul)
-			NewSpeed *= Mul
-			
-			Flag = 1
-		}
-		DestroyTravTrieIterator(Iter)
-		
-		if(Flag)
-			set_user_maxspeed(id,NewSpeed)
-	}
-	
 	g_Falling[id] = entity_get_float(id,EV_FL_flFallVelocity) > 350.0
 	
 	new Index,Body,EntList[50]
@@ -1915,11 +1801,13 @@ public client_PreThink(id)
 			}	
 		}
 		
-		Index = 0
-		while((Index = find_ent_by_class(Index,g_NpcZoneClassname)))
+		new NumEnts = find_sphere_class(id,g_NpcZoneClassname,50.0,EntList,50),Performance = get_pcvar_num(p_Performance)
+		for(new Count;Count < NumEnts;Count++)
 		{
-			if(get_entity_distance(id,Index) > 100 || !fm_is_ent_visible(id,Index))
+			if(Performance > 40 && !fm_is_ent_visible(id,EntList[Count]))
 				continue
+				
+			Index = EntList[Count]
 			
 			new Plugin = entity_get_int(Index,EV_INT_iuser3),Handler[32]
 			entity_get_string(Index,EV_SZ_noise,Handler,31)
@@ -1949,13 +1837,15 @@ GetMsg(id,Index)
 	static Name[33],Message[128],Classname[33]
 	entity_get_string(Index,EV_SZ_classname,Classname,32)
 	
-	new Ent
-	while((Ent = find_ent_by_class(Ent,g_NpcZoneClassname)))
+	new EntList[50],NumEnts = find_sphere_class(id,g_NpcZoneClassname,50.0,EntList,50)
+	for(new Count;Count < NumEnts;Count++)
 	{
-		if(!get_entity_distance(id,Ent) || !fm_is_ent_visible(id,Ent))
+		if(!fm_is_ent_visible(id,EntList[Count]))
 			continue
-		
-		entity_get_string(Ent,EV_SZ_noise1,Name,32)
+			
+		EntList[0] = EntList[Count]
+			
+		entity_get_string(EntList[0],EV_SZ_noise1,Name,32)
 		
 		format(Message,127,"%s^nPress use (default e) to use",Name)
 		
@@ -2005,7 +1895,7 @@ GetMsg(id,Index)
 			}
 		}
 	}
-	else if(get_pcvar_num(p_HoverMessage) && equali(Classname,"player"))
+	else if(equali(Classname,"player"))
 	{
 		static JobName[33],Name[33]
 		get_user_name(Index,Name,32)
@@ -2015,7 +1905,7 @@ GetMsg(id,Index)
 		
 		//if(g_HudPending)
 		//	client_print(id,print_chat,"Hud Added")
-	}
+	}	
 	
 	if(!g_HudPending)
 	{
@@ -2051,9 +1941,6 @@ NpcUse(Handler[],Plugin,id,Index)
 public plugin_natives()
 {
 	register_library("arp")
-	
-	set_module_filter("ModuleFilter")
-	set_native_filter("NativeFilter")
 	
 	register_native("ARP_Version","_ARP_Version")
 	
@@ -2147,7 +2034,6 @@ public plugin_natives()
 	register_native("ARP_PropertySetProfit","_ARP_PropertySetProfit")
 	register_native("ARP_PropertyAddAccess","_ARP_PropertyAddAccess")
 	register_native("ARP_PropertyRemoveAccess","_ARP_PropertyRemoveAccess")
-	register_native("ARP_PropertyClearAccess","_ARP_PropertyClearAccess")
 	
 	//register_native("ARP_RegisterRob","_ARP_RegisterRob")
 	//register_native("ARP_Rob","_ARP_Rob")
@@ -2162,70 +2048,8 @@ public plugin_natives()
 	register_native("ARP_ClassSave","_ARP_ClassSave")
 	register_native("ARP_ClassSaveHook","_ARP_ClassSaveHook")
 	register_native("ARP_ClassDeleteKey","_ARP_ClassDeleteKey")
-	register_native("ARP_ClassDestroy","_ARP_ClassDestroy")
-	
-	register_native("ARP_SetUserSpeed","_ARP_SetUserSpeed")
-	//register_native("ARP_GetUserSpeed","_ARP_GetUserSpeed")
 	
 	register_native("ARP_AddMenuItem","_ARP_AddMenuItem")
-}
-
-public _ARP_SetUserSpeed(Plugin,Params)
-{
-	if(Params != 3)
-	{
-		log_error(AMX_ERR_NATIVE,"Invalid params passed: %d - Expected: 3",Params)
-		return PLUGIN_CONTINUE
-	}
-	
-	new id = get_param(1),Float:Value = get_param_f(3)
-	if(!is_user_connected(id))
-	{
-		format(g_Query,4095,"Player not connected: %d",id)
-		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,Plugin)
-	}
-	
-	switch(Speed:get_param(2))
-	{
-		case Speed_None:
-		{
-			TravTrieDeleteKeyEx(g_SpeedTrie[id],Plugin)
-			
-			if(g_SpeedOverridePlugin[id] == Plugin)
-			{
-				g_SpeedOverride[id] = 0.0
-				g_SpeedOverridePlugin[id] = 0
-			}
-		}
-		case Speed_Override:
-		{
-			if(g_SpeedOverridePlugin[id] && g_SpeedOverridePlugin[id] != Plugin)
-				return FAILED
-			
-			g_SpeedOverride[id] = Value
-			g_SpeedOverridePlugin[id] = Plugin
-		}
-		case Speed_Mul:
-		{
-			if(Value < 0.001)
-				Value = 0.001
-			
-			new Float:PrevSpeed
-			if(TravTrieGetCellEx(g_SpeedTrie[id],Plugin,PrevSpeed) && PrevSpeed)
-				// Compound it with whatever was set before.
-				Value *= PrevSpeed
-			
-			if(Value < 1.001 && Value > 0.999 )
-				TravTrieDeleteKeyEx(g_SpeedTrie[id],Plugin)
-			else
-				TravTrieSetCellEx(g_SpeedTrie[id],Plugin,Value)
-		}
-	}
-	
-	// Fake a reset in case client_PreThink() skips.
-	set_user_maxspeed(id,g_MaxSpeed[id])
-	
-	return SUCCEEDED
 }
 
 public _ARP_SqlMode(Plugin,Params)
@@ -2456,7 +2280,7 @@ _ARP_CleverQuery(Plugin,Handle:Tuple,Handler[],QueryS[],Data[] = "",Len = 0)
 			return PLUGIN_CONTINUE
 		}
 		
-		new Handle:Query = SQL_PrepareQuery(SqlConnection,"%s",QueryS)
+		new Handle:Query = SQL_PrepareQuery(SqlConnection,QueryS)
 		if(!SQL_Execute(Query))
 		{
 			ErrorCode = SQL_QueryError(Query,Error,511)
@@ -2503,7 +2327,9 @@ public _ARP_ClassLoad(Plugin,Params)
 	
 	new travTrieIter:Iter = GetTravTrieIterator(g_ClassArray),Cell,ClassHeader[64],Loaded,TravTrie:CurTrie,TravTrie:PluginTrie,Flag,ReadTable[64],Garbage[1]
 	while(MoreTravTrie(Iter))
-	{		
+	{
+		log_amx("looking for already loaded classes: %s",ClassName)
+		
 		ReadTravTrieKey(Iter,ClassHeader,63)
 		ReadTravTrieCell(Iter,Cell)
 		
@@ -2511,8 +2337,12 @@ public _ARP_ClassLoad(Plugin,Params)
 		if(Table[0] && equali(ReadTable,Table))
 			Flag = 1
 		
+		log_amx("same table found (Flag): %d",Flag)
+		
 		if(equali(ClassName,ClassHeader))
 		{			
+			log_amx("found it")
+			
 			TravTrieGetCell(g_ClassArray,ClassHeader,CurTrie)
 			
 			TravTrieGetHCell(CurTrie,"/plugins",PluginTrie)
@@ -2520,7 +2350,9 @@ public _ARP_ClassLoad(Plugin,Params)
 			
 			TravTrieGetHCell(CurTrie,"/loaded",Loaded)
 			if(!Loaded)
-			{				
+			{
+				log_amx("It isn't loaded yet.")
+				
 				new TravTrie:CallsTrie
 				TravTrieGetHCell(CurTrie,"/calls",CallsTrie)
 				
@@ -2546,13 +2378,17 @@ public _ARP_ClassLoad(Plugin,Params)
 			}				
 			DestroyForward(Forward)
 			
+			log_amx("Called forward: %d %d %s %s %s",Plugin,CurTrie,ClassHeader,Handler,g_Query)
+			
 			return PLUGIN_HANDLED
 		}
 	}
 	DestroyTravTrieIterator(Iter)
 	
 	if(!Flag && !equali(g_DataTable,Table))
-	{		
+	{
+		log_amx("No table found; creating it: %s",Table)
+		
 		static Query[512]
 		switch(g_SqlMode)
 		{
@@ -2570,8 +2406,6 @@ public _ARP_ClassLoad(Plugin,Params)
 	
 	//server_print("Setting array: %d | %s | %s | %d",CallTrie,Handler,g_Query,Len)
 	new TravTrie:CallTrie = TravTrieCreate()
-	PluginTrie = TravTrieCreate()
-	TravTrieSetCellEx(PluginTrie,Plugin,1)
 	TravTrieSetString(CallTrie,Temp,g_Query)
 	
 	CurTrie = TravTrieCreate()
@@ -2579,7 +2413,7 @@ public _ARP_ClassLoad(Plugin,Params)
 	TravTrieSetHCell(CurTrie,"/loaded",0)
 	TravTrieSetHCell(CurTrie,"/saving",0)
 	TravTrieSetHCell(CurTrie,"/lastquery",0)
-	TravTrieSetHCell(CurTrie,"/plugins",PluginTrie)
+	TravTrieSetHCell(CurTrie,"/plugins",TravTrieCreate())
 	TravTrieSetHCell(CurTrie,"/changed",TravTrieCreate())
 	TravTrieSetHCell(CurTrie,"/calls",CallTrie)
 	TravTrieSetHCell(CurTrie,"/savetrie",TravTrieCreate())
@@ -2588,21 +2422,21 @@ public _ARP_ClassLoad(Plugin,Params)
 	
 	Buffer[127] = _:CurTrie
 	
-	new OldBuffer[128]
-	for(new i;i < 128;i++)
-		OldBuffer[i] = Buffer[i]
-	ARP_SqlEscape(Buffer,charsmax(Buffer))
 	format(g_Query,4095,"SELECT * FROM %s WHERE classkey LIKE '%s|%%'",Table,Buffer)
+	log_amx("Select query: %s",g_Query)
 	//UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"ClassLoadHandle",g_Query,Buffer,128)
-	SQL_ThreadQuery(g_SqlHandle,"ClassLoadHandle",g_Query,OldBuffer,128)
+	SQL_ThreadQuery(g_SqlHandle,"ClassLoadHandle",g_Query,Buffer,128)
 	
 	return PLUGIN_CONTINUE
 }
 
 public ClassLoadHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize) 
-{	
+{
+	log_amx("Class Loaded")
+	
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -2625,6 +2459,8 @@ public ClassLoadHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 		strtok(ClassKey,Garbage,1,Key,63,'|')
 		SQL_ReadResult(Query,1,Value,127)
 		
+		log_amx("Results: %s | %s",ClassKey,Value)
+		
 		TravTrieSetString(CurTrie,Key,Value)
 		
 		SQL_NextRow(Query)
@@ -2640,6 +2476,9 @@ public ClassLoadHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 		strtok(Temp,PluginStr,9,Handler,63,'|')
 		Plugin = str_to_num(PluginStr)
 		ReadTravTrieString(Iter,g_Query,4095)
+		
+		log_amx("Blah: %s | %s | %d",Temp,g_Query,CurTrie)
+		log_amx("Plugin: %d | Handler: %s | CurTrie: %d | Data: %s | g_Query: %s",Plugin,Handler,CurTrie,Data,g_Query)
 		
 		Forward = CreateOneForward(Plugin,Handler,FP_CELL,FP_STRING,FP_STRING)
 		//CurArray = PrepareArray(g_Query[1],g_Query[0])
@@ -2665,15 +2504,16 @@ public ClassLoadHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 	return PLUGIN_CONTINUE
 }
 
-public _ARP_ClassSave(ThisPlugin,Params)
+public _ARP_ClassSave(Plugin,Params)
 {
 	if(Params != 2)
 	{
 		format(g_Query,4095,"Parameters do not match. Expected: 2, Found: %d",Params)
-		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,ThisPlugin)
+		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,Plugin)
 	}
 	
 	new TravTrie:ClassNum = TravTrie:get_param_byref(1),ProcClass[128],Close = get_param(2),travTrieIter:Iter = GetTravTrieIterator(g_ClassArray),TrieClass[64],TravTrie:CurTrie,TravTrie:PluginTrie,ClassName[64]
+	log_amx("Beginning lookup: %d",ClassNum)
 	while(MoreTravTrie(Iter))
 	{
 		ReadTravTrieKey(Iter,TrieClass,63)
@@ -2681,8 +2521,11 @@ public _ARP_ClassSave(ThisPlugin,Params)
 		
 		copy(ClassName,63,TrieClass[containi(TrieClass,"|") + 1])
 		
+		log_amx("Found a class: %d|%s",CurTrie,TrieClass)
+		
 		if(CurTrie == ClassNum && !task_exists(_:CurTrie))
 		{
+			log_amx("Match: %d",CurTrie)
 			//SQL_QuoteString(g_SqlHandle,ProcClass,127,Class)
 			copy(ProcClass[1],126,TrieClass)
 			
@@ -2694,12 +2537,12 @@ public _ARP_ClassSave(ThisPlugin,Params)
 			new TravTrie:SaveTrie
 			TravTrieGetHCell(CurTrie,"/savetrie",SaveTrie)
 			
-			new travTrieIter:saveIter = GetTravTrieIterator(SaveTrie),Handler[64],Temp[128],PluginStr[10],Plugin,Forward,Return
+			new travTrieIter:Iter = GetTravTrieIterator(SaveTrie),Handler[64],Temp[128],PluginStr[10],Plugin,Forward,Return
 			//server_print("ITERATOR: %d, SAVETRIE: %d",Iter,SaveTrie)
-			while(MoreTravTrie(saveIter))
+			while(MoreTravTrie(Iter))
 			{
-				ReadTravTrieKey(saveIter,Temp,127)
-				ReadTravTrieString(saveIter,g_Query,4095)
+				ReadTravTrieKey(Iter,Temp,127)
+				ReadTravTrieString(Iter,g_Query,4095)
 				
 				strtok(Temp,PluginStr,9,Handler,63,'|')
 				Plugin = str_to_num(PluginStr)
@@ -2714,17 +2557,19 @@ public _ARP_ClassSave(ThisPlugin,Params)
 				}
 				DestroyForward(Forward)
 			}
-			DestroyTravTrieIterator(saveIter)
+			DestroyTravTrieIterator(Iter)
 			
-			//if(_CallEvent("Class_Save",ClassName,128))
-			//	return FAILED
+			if(_CallEvent("Class_Save",ClassName,128))
+				return FAILED
+			
+			log_amx("Passed Class_Save")
 			
 			if(Close)
-			{					
-				//server_print("marking as closed: %s / %d",TrieClass,ThisPlugin)
+			{
+				log_amx("Closing class: %d",ClassNum)
 				
 				TravTrieGetHCell(CurTrie,"/plugins",PluginTrie)
-				TravTrieDeleteKeyEx(PluginTrie,ThisPlugin)
+				TravTrieDeleteKeyEx(PluginTrie,Plugin)
 				
 				set_param_byref(1,_:Invalid_TravTrie)
 			}
@@ -2740,7 +2585,9 @@ public _ARP_ClassSave(ThisPlugin,Params)
 }
 
 public SaveClass(TravTrie:CurTrie,ProcClass[])
-{	
+{
+	log_amx("Instructed to save")
+	
 	new Saving
 	TravTrieGetHCell(CurTrie,"/saving",Saving)
 	if(Saving)
@@ -2782,12 +2629,16 @@ public SaveClass(TravTrie:CurTrie,ProcClass[])
 	TravTrieSetHCell(CurTrie,"/lastquery",ChangedNum)
 	DestroyTravTrieIterator(Iter)
 	
+	log_amx("Cycling")
+	
 	Iter = GetTravTrieIterator(CurTrie)
 	while(MoreTravTrie(Iter))
 	{				
 		ReadTravTrieKey(Iter,TrieClass,63)
 		ReadTravTrieString(Iter,g_Query,4095)
 		TravTrieGetCell(ChangedTrie,TrieClass,Changed)
+		
+		log_amx("Found: %s|%s",TrieClass,g_Query)
 		
 		if(TrieClass[0] == '^0' || TrieClass[0] == '/' || !Changed) continue
 		
@@ -2809,6 +2660,8 @@ public SaveClass(TravTrie:CurTrie,ProcClass[])
 		//replace_all(Key,127,"'","\'")
 		//replace_all(g_Cache,4095,"'","\'")
 		
+		log_amx("Saving: %s|%s - %s",ClassName,Key,g_Cache)
+		
 		switch(g_SqlMode)
 		{
 			case MYSQL: 
@@ -2816,6 +2669,7 @@ public SaveClass(TravTrie:CurTrie,ProcClass[])
 			case SQLITE:
 				format(g_Query,4095,"REPLACE INTO %s VALUES ('%s|%s','%s')",Table,ClassName,Key,g_Cache)
 		}
+		log_amx("Query sent: %s",g_Query)
 		UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"ClassSaveHandle",g_Query,Data,64)
 	}
 	DestroyTravTrieIterator(Iter)
@@ -2824,10 +2678,10 @@ public SaveClass(TravTrie:CurTrie,ProcClass[])
 	TravTrieGetHCell(CurTrie,"/plugins",PluginTrie)
 	TravTrieGetHCell(CurTrie,"/savetrie",SaveTrie)
 	
-// Hawk552: Do this later no matter what driver we're running.
-#if 000
 	if(!ChangedNum && !TravTrieSize(PluginTrie) && g_SqlMode == SQLITE)
-	{				
+	{
+		log_amx("Closing class #2: %d",CurTrie)
+		
 		TravTrieDestroy(PluginTrie)
 		TravTrieDestroy(CurTrie)
 		TravTrieDestroy(ChangedTrie)
@@ -2835,10 +2689,6 @@ public SaveClass(TravTrie:CurTrie,ProcClass[])
 			
 		TravTrieDeleteKey(g_ClassArray,ProcClass)
 	}
-#endif
-	
-	if(!ChangedNum)
-		ClassSaveHandle(0,Empty_Handle,"",0,Data,64)
 	
 	return SUCCEEDED
 }
@@ -2847,6 +2697,7 @@ public ClassSaveHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -2866,7 +2717,7 @@ public ClassSaveHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 	new LastQuery,TravTrie:CurTrie = TravTrie:Data[1]
 	TravTrieGetHCell(CurTrie,"/lastquery",LastQuery)
 	
-	if(Data[0] == LastQuery /*&& g_SqlMode != SQLITE*/)
+	if(Data[0] == LastQuery && g_SqlMode != SQLITE)
 	{
 		TravTrieSetHCell(CurTrie,"/saving",0)
 	
@@ -2875,11 +2726,8 @@ public ClassSaveHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 		TravTrieGetHCell(CurTrie,"/changed",ChangedTrie)
 		TravTrieGetHCell(CurTrie,"/savetrie",SaveTrie)
 
-		//server_print("trie size: %d [%s]", TravTrieSize(PluginTrie),Data[2])
 		if(!TravTrieSize(PluginTrie) && !g_PluginEnd)
 		{
-			//server_print("destroying %s",Data[2])
-			
 			TravTrieDestroy(PluginTrie)
 			TravTrieDestroy(CurTrie)
 			TravTrieDestroy(ChangedTrie)
@@ -2925,75 +2773,26 @@ public _ARP_ClassDeleteKey(Plugin,Params)
 	new TravTrie:ClassNum = TravTrie:get_param(1),Key[64]
 	get_string(2,Key,63)
 	
-	if(Key[0] == '/' || Key[0] == '^n' || !ClassNum) 
+	if(Key[0] == '/' || Key[0] == '^n' || !Class) 
 		return FAILED
 	
-	new travTrieIter:Iter = GetTravTrieIterator(g_ClassArray),Cell,Name[64],Table[64]
+	new travTrieIter:Iter = GetTravTrieIterator(g_ClassArray),Cell,Name[64]
 	while(MoreTravTrie(Iter))
 	{
 		ReadTravTrieKey(Iter,Name,63)
 		ReadTravTrieCell(Iter,Cell)
-		if(Cell == _:ClassNum)		
-		{
-			strtok(Name,"",0,Name,63,'|')
+		if(Cell == _:ClassNum)			
 			break
-		}
 	}
 	DestroyTravTrieIterator(Iter)
-	
-	TravTrieGetString(ClassNum,"/table",Table,63)
 	
 	//if(!Name[0])
 	//	return FAILED
 	
-	new KeyDeleted = TravTrieDeleteKey(ClassNum,Key)
-	
-	ARP_SqlEscape(Name,63)
-	ARP_SqlEscape(Key,63)
-	
-	format(g_Query,4095,"DELETE FROM %s WHERE classkey='%s|%s'",Table,Name,Key)
+	format(g_Query,4095,"DELETE FROM %s WHERE classkey='%s|%s'",g_DataTable,Name,Key)
 	UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"IgnoreHandle",g_Query)
 	
-	return KeyDeleted
-}
-
-public _ARP_ClassDestroy(Plugin,Params)
-{
-	if(Params != 1)
-	{
-		format(g_Query,4095,"Parameters do not match. Expected: 1, Found: %d",Params)
-		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,Plugin)
-	}
-	
-	new TravTrie:CurTrie = TravTrie:get_param(1)
-	
-	new travTrieIter:Iter = GetTravTrieIterator(g_ClassArray),Cell,Name[64],Table[64]
-	while(MoreTravTrie(Iter))
-	{
-		ReadTravTrieKey(Iter,Name,63)
-		ReadTravTrieCell(Iter,Cell)
-		if(Cell == _:CurTrie)			
-			break
-	}
-	DestroyTravTrieIterator(Iter)
-	
-	TravTrieGetString(CurTrie,"/table",Table,63)
-	
-	format(g_Query,4095,"DELETE FROM %s WHERE classkey LIKE '%s|%%'",Table,Name)
-	
-	new TravTrie:PluginTrie,TravTrie:ChangedTrie,TravTrie:SaveTrie
-	TravTrieGetHCell(CurTrie,"/plugins",PluginTrie)
-	TravTrieGetHCell(CurTrie,"/changed",ChangedTrie)
-	TravTrieGetHCell(CurTrie,"/savetrie",SaveTrie)
-		
-	TravTrieDestroy(PluginTrie)
-	TravTrieDestroy(CurTrie)
-	TravTrieDestroy(ChangedTrie)
-	TravTrieDestroy(SaveTrie)
-	
-	TravTrieDeleteKey(g_ClassArray,Name)
-	
-	return SUCCEEDED
+	return TravTrieDeleteKey(ClassNum,Key)
 }
 
 public _ARP_AddMenuItem(Plugin,Params)
@@ -3062,7 +2861,7 @@ _CallEvent(Name[],Data[],Length)
 	
 		if(!ExecuteForward(Forward,Return,Event,CurArray,Length))
 		{
-			format(g_Query,4095,"Could not execute forward: %s in %d",Handler,Plugin)
+			format(g_Query,4095,"Could not execute forward")
 			return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,g_Plugin)
 		}
 		
@@ -3260,7 +3059,7 @@ public _ARP_ItemSet(Plugin,Params)
 	
 	new id = get_param(1)
 	if(is_user_connected(id))
-		return g_ItemUse[id] ? FAILED : (g_ItemUse[id] = Plugin)
+		return g_ItemUse[id] = Plugin
 	else
 	{
 		format(g_Query,4095,"User not connected: %d",id)
@@ -3352,10 +3151,6 @@ UTIL_ARP_AddJob(Name[],Salary,IntAccess)
 	#if defined DEBUG
 	g_TotalQueries++
 	#endif
-	
-	new FmtName[64]
-	copy(FmtName,63,Name)
-	ARP_SqlEscape(FmtName,63)
 	
 	format(g_Query,4095,"INSERT INTO %s VALUES ('%s','%d','%s')",g_JobsTable,Name,Salary,Access)
 	UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"IgnoreHandle",g_Query)
@@ -4033,8 +3828,6 @@ public _ARP_PropertyAddAccess(Plugin,Params)
 	g_TotalQueries++
 	#endif
 	
-	ARP_SqlEscape(InternalName,63)
-	
 	format(g_Query,4095,"INSERT INTO %s VALUES('%s|%s')",g_KeysTable,Authid,InternalName)
 	UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"IgnoreHandle",g_Query)
 	
@@ -4082,8 +3875,6 @@ public _ARP_PropertyRemoveAccess(Plugin,Params)
 	g_TotalQueries++
 	#endif
 	
-	ARP_SqlEscape(InternalName,63)
-	
 	format(g_Query,4095,"DELETE FROM %s WHERE authidkey='%s|%s'",g_KeysTable,Authid,InternalName)
 	UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"IgnoreHandle",g_Query)
 	
@@ -4100,49 +3891,6 @@ public _ARP_PropertyRemoveAccess(Plugin,Params)
 			array_set_int(CurArray,8,array_get_int(CurArray,8) & ~(1<<(Player - 1)))
 			break
 		}
-	}
-	
-	return SUCCEEDED
-}
-
-public _ARP_PropertyClearAccess(Plugin,Params)
-{
-	if(Params != 1)
-	{
-		format(g_Query,4095,"Parameters do not match. Expected: 1, Found: %d",Params)
-		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,Plugin)
-	}
-	
-	new Property = get_param(1) - 1
-	
-	if(!UTIL_ARP_ValidProperty(Property))
-	{
-		format(g_Query,4095,"Property does not exist: %d",Property)
-		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,Plugin)
-	}
-	
-	UTIL_ARP_PropertyChanged(Property)
-	
-	return UTIL_ARP_PropertyClearAccess(Property)
-}
-
-UTIL_ARP_PropertyClearAccess(Property)
-{
-	new CurArray = array_get_int(g_PropertyArray,Property),InternalName[64]
-	array_get_string(CurArray,0,InternalName,63)
-	
-	#if defined DEBUG
-	g_TotalQueries++
-	#endif
-	
-	ARP_SqlEscape(InternalName,63)
-	
-	if(array_get_int(CurArray,8))
-	{
-		format(g_Query,4095,"DELETE FROM %s WHERE authidkey LIKE '%%|%s'",g_KeysTable,InternalName)
-		UTIL_ARP_CleverQuery(g_Plugin,g_SqlHandle,"IgnoreHandle",g_Query)
-		
-		array_set_int(CurArray,8,0)
 	}
 	
 	return SUCCEEDED
@@ -4563,9 +4311,8 @@ public _ARP_RegisterItem(Plugin,Params)
 		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,g_Query,Plugin)
 	}
 	
-	// Hawk552: Disabled this for now, let's see how it goes.
-	//if(!g_RegisterItem)
-	//	return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,"ARP_RegisterItem can only be run in the ^"ARP_RegisterItems^" forward.",Plugin)
+	if(!g_RegisterItem)
+		return UTIL_ARP_ThrowError(AMX_ERR_NATIVE,0,"ARP_RegisterItem can only be run in the ^"ARP_RegisterItems^" forward.",Plugin)
 		
 	new Name[33],Handler[33],Description[64]//,ItemId = get_param(2)
 	get_string(1,Name,32)
@@ -4649,7 +4396,7 @@ public _ARP_FindItemId(Plugin,Params)
 		Results[Count] = Temp[Cell]
 	}
 	
-	if(Num) set_array(2,Results,min(MaxResults,Num))
+	set_array(2,Results,Num)
 	
 	return Num
 }
@@ -4708,7 +4455,18 @@ public _ARP_RegisterNpc(Plugin,Params)
 		}
 		
 		entity_set_string(Ent,EV_SZ_classname,g_NpcZoneClassname)
+		entity_set_model(Ent,g_FillModel)
+		//entity_set_model(Ent,"")
 		entity_set_origin(Ent,Origin)
+		entity_set_size(Ent,Float:{-16.0,-16.0,-36.0},Float:{16.0,16.0,36.0})
+		entity_set_int(Ent,EV_INT_solid,SOLID_TRIGGER)
+		entity_set_byte(Ent,EV_BYTE_controller1,125)
+		entity_set_byte(Ent,EV_BYTE_controller2,125)
+		entity_set_byte(Ent,EV_BYTE_controller3,125)
+		entity_set_byte(Ent,EV_BYTE_controller4,125)
+		entity_set_int(Ent,EV_INT_sequence,1)
+		entity_set_float(Ent,EV_FL_framerate,1.0)
+		entity_set_vector(Ent,EV_VEC_angles,Angles)
 		entity_set_int(Ent,EV_INT_iuser3,Plugin)
 		entity_set_string(Ent,EV_SZ_noise,Handler)
 		entity_set_string(Ent,EV_SZ_noise1,Name)
@@ -5033,8 +4791,6 @@ public FetchClientData(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 	
 	if(SQL_NumResults(Query) < 1)
 	{
-		//g_FirstJoin[id] = 1
-
 		new Authid[36],StartMoney = get_pcvar_num(p_StartMoney)
 		get_user_authid(id,Authid,35)
 		
@@ -5137,6 +4893,7 @@ public FetchClientItems(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -5185,6 +4942,7 @@ public FetchClientKeys(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -5250,6 +5008,7 @@ public IgnoreHandle(FailState,Handle:Query,Error[],Errcode,Data[],DataSize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED)
 	{
+		g_SqlHandle = Empty_Handle
 		format(g_Query,4095,"Could not connect to database: %s",Error)
 		return UTIL_ARP_ThrowError(0,0,g_Query,0)
 	}
@@ -5294,7 +5053,7 @@ public ShowHud()
 		//for(Count2 = 0;Count2 < HUD_NUM;Count2++)
 		//	ClearHud(Player,Count2)
 		
-		if(!is_user_connected(Player))
+		if(!is_user_connected(Player) || !is_user_alive(Player))
 			continue
 		
 		if(g_Time == StartTime)
@@ -5417,19 +5176,11 @@ RenderHud(id,Hud)
 	DestroyTravTrieIterator(Iter)
 }*/
 
-public ForwardSetClientMaxspeed(id,Float:NewSpeed)
-{
-	g_MaxSpeed[id] = NewSpeed
-	return FMRES_IGNORED
-}
-
 public EventDeathMsg()
 {
 	new id = read_data(2)
 	if(get_pcvar_num(p_WalletDeath))
 		g_Money[id] = 0
-	
-	g_Hunger[id] = 0
 }
 
 public EventResetHUD(id)
@@ -5437,7 +5188,7 @@ public EventResetHUD(id)
 
 public Welcome(id)
 	if(is_user_alive(id))
-	{		
+	{
 		if(!g_Joined[id])
 		{
 			for(new Count;Count < 3;Count++)
@@ -5767,16 +5518,17 @@ UTIL_ARP_ClientPrint(id,Message[],{Float,Sql,Result,_}:...)
 	//if(equali(g_Query,g_LastMsg[id]))
 	//	return
 	
-	new Copy[128]
-	copy(Copy[2],125,Message)
-	Copy[0] = id
-	Copy[1] = HUD_QUAT
-	
 	switch(get_pcvar_num(p_AuxType))
 	{
-		case 1 :	
+		case 1 :
 		{
+			new Copy[128]
+			copy(Copy[2],125,Message)
+			Copy[0] = id
+			Copy[1] = HUD_QUAT
+			
 			if(_CallEvent("HUD_AddItem",Copy,128)) return
+			
 			client_print(id,print_center,"%s",g_Query)
 		}
 		case 2 :

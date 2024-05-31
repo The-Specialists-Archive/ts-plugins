@@ -20,7 +20,7 @@ native contain(const source[],const string[]);
 native containi(const source[],const string[]);
 
 /* Replaces given string to another in given text. */
-native replace(text[], len, const what[], const with[]);
+native replace(text[],len,const what[],const with[]);
 
 /* Adds one string to another. Last parameter different from 0, specifies
 * how many chars we want to add. Function returns number of all merged chars. */
@@ -46,26 +46,6 @@ native format(output[] ,len ,const format[] , {Float,Sql,Result,_}:...);
  *  rather than copied back at the end.
  */
 native formatex(output[] ,len ,const format[] , {Float,Sql,Result,_}:...);
-
-/* Replacement for format_args.  Much faster and %L compatible.
- * This works exactly like vsnprintf() from C.
- * You must pass in the output buffer and its size,
- *  the string to format, and the number of the FIRST variable
- *  argument parameter.  For example, for:
- *  function (a, b, c, ...)
- *  You would pass 4 (a is 1, b is 2, c is 3, et cetera).
- * There is no vformatex().
- */
-native vformat(buffer[], len, const fmt[], vararg);
-
-/*
- * Same as vformat(), except works in normal style dynamic natives.
- * Instead of passing the format arg string, you can only pass the 
- *  actual format argument number itself.
- * If you pass 0, it will read the format string from an optional 
- *  fifth parameter.
- */
-native vdformat(buffer[], len, fmt_arg, vararg, ...);
 
 /* Gets parameters from function as formated string. */
 native format_args(output[] ,len ,pos = 0);
@@ -215,52 +195,17 @@ stock remove_filepath(szFilePath[], szFile[], pMax)
 	return;
 }
 
-/* Replaces a contained string iteratively.
- * This ensures that no infinite replacements will take place by
- *  intelligently moving to the next string position each iteration.
- */
+/* Replaces a contained string
+   By jtp10181
+*/
 stock replace_all(string[], len, what[], with[])
 {
-	new pos = 0;
+	new withlen, charnum = 0;
 	
-	if ((pos = contain(string, what)) == -1)
+	withlen = strlen(with);
+	
+	while (replace(string[charnum], len, what, with) != 0)
 	{
-		return 0;
+		charnum += contain(string[charnum], with) + withlen;
 	}
-	
-	new total = 0;
-	new with_len = strlen(with);
-	new diff = strlen(what) - with_len;
-	new total_len = strlen(string);
-	new temp_pos = 0
-	
-	while (replace(string[pos], len - pos, what, with) != 0)
-	{
-		/* jump to position after replacement */
-		pos += with_len;
-		
-		/* update cached length of string */
-		total_len -= diff;
-		
-		/* will the next call be operating on the last character? */
-		if (pos >= total_len)
-		{
-			break;
-		}
-		
-		/* find the next position from our offset */
-		temp_pos = contain(string[pos], what);
-		
-		/* if it's invalid, we're done */
-		if (temp_pos == -1)
-		{
-			break;
-		}
-		
-		/* otherwise, reposition and update counters */
-		pos += temp_pos;
-		total++;
-	}
-	
-	return total;
 }

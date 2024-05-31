@@ -55,10 +55,10 @@ new g_CallMenu[] = "ARP_PhoneCallMenu"
 new g_StatusMenu[] = "ARP_PhoneStatusMenu"
 new g_AnswerMenu[] = "ARP_PhoneAnswerMenu"
 
-new g_RingSound[] = "arp/ring.wav"
-new g_SmsSound[] = "arp/sms.wav"
-new g_911Sound[] = "arp/9.wav"
-new g_911Sound2[] = "arp/1.wav"
+new g_RingSound[] = "phone/ring.wav"
+new g_SmsSound[] = "phone/sms.wav"
+new g_911Sound[] = "phone/9.wav"
+new g_911Sound2[] = "phone/1.wav"
 
 new g_Bugged[33]
 
@@ -556,7 +556,7 @@ public CmdSay(id)
 				
 			format(Msg,255,"(CNN) %s: %s",Name,Args)
 			
-			ARP_ChatMessage(id,0,Msg)
+			client_print(0,print_chat,"%s",Msg)
 			//ARP_ChatMessage(id,0,Msg)
 			client_cmd(0,"spk fvox/alert")
 			
@@ -584,7 +584,7 @@ public CmdSay(id)
 				
 			format(Msg,255,"(ADVERT) %s: %s",Name,Args)
 			
-			ARP_ChatMessage(id,0,Msg)
+			client_print(0,print_chat,"%s",Msg)
 			//ARP_ChatMessage(id,0,Msg)
 			
 			return End(Msg)
@@ -828,11 +828,8 @@ public CmdSay(id)
 			}
 			
 			format(Msg,511,"(SMS) %s: %s",Name,Msg)
-			ARP_ChatMessage(id,Index,Msg)
-			ARP_ChatMessage(id,id,Msg)
-			
-			client_cmd(id,"say ^"/me sends an SMS message.^"")
-			
+			client_print(Index,print_chat,"%s",Msg)
+			client_print(id,print_chat,"%s",Msg)
 			//ARP_ChatMessage(id,Index,Msg)
 			//ARP_ChatMessage(id,id,Msg)
 			
@@ -873,14 +870,12 @@ public CmdSay(id)
 				if(ARP_IsMed(Player) || ARP_IsCop(Player) || Player == id)
 				{
 					//ARP_ChatMessage(id,Player,Msg)
-					ARP_ChatMessage(id,Player,Msg)
+					client_print(Player,print_chat,"%s",Msg)
 					Play911Sound(Player)
 					set_task(1.0,"Play911Sound",Player + 32)
 					set_task(2.0,"Play911Sound",Player + 32)
 				}
 			}
-			
-			client_cmd(id,"say ^"/me calls 911.^"")
 			
 			return End(Msg)
 		}

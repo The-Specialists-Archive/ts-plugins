@@ -105,7 +105,11 @@ public actionTelMenu(id, key)
 
 			log_amx("Cmd: ^"%s<%d><%s><>^" teleport ^"%s<%d><%s><>^"", name, get_user_userid(id), authid, name2, get_user_userid(player), authid2)
 
-			show_activity_key("ADMIN_TELEPORT_1", "ADMIN_TELEPORT_2", name, name2);
+			switch (get_cvar_num("amx_show_activity"))
+			{
+				case 2: client_print(0, print_chat, "%L", LANG_PLAYER, "ADMIN_TELEPORT_2", name, name2)
+				case 1: client_print(0, print_chat, "%L", LANG_PLAYER, "ADMIN_TELEPORT_1", name2)
+			}
 
 			displayTelMenu(id, g_menuPosition[id])
 		}
@@ -143,7 +147,7 @@ displayTelMenu(id, pos)
 		i = g_menuPlayers[id][a]
 		get_user_name(i, name, 31)
 
-		if (blockMenu || !is_user_alive(i) || (id != i && get_user_flags(i) & ADMIN_IMMUNITY))
+		if (blockMenu || !is_user_alive(i) || (get_user_flags(i) & ADMIN_IMMUNITY))
 		{
 			++b
 		
@@ -153,11 +157,7 @@ displayTelMenu(id, pos)
 				len += format(menuBody[len], 511-len, "#. %s^n", name)
 		} else {
 			keys |= (1<<b)
-			
-			if (is_user_admin(i))
-				len += format(menuBody[len], 511-len, g_coloredMenus ? "%d. %s \r*^n\w" : "%d. %s *^n", ++b, name)
-			else
-				len += format(menuBody[len], 511-len, "%d. %s^n", ++b, name)
+			len += format(menuBody[len], 511-len, "%d. %s^n", ++b, name)
 		}
 	}
 

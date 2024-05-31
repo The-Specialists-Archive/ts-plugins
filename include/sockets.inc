@@ -13,14 +13,7 @@
 #endif
 #define _socket_included
 
-#if AMXX_VERSION_NUM >= 175
- #pragma reqlib sockets
- #if !defined AMXMODX_NOAUTOLOAD
-  #pragma loadlib sockets
- #endif
-#else
- #pragma library socket
-#endif
+#pragma library socket
 
 // Use SOCKET_TCP for TCP Socket connections
 

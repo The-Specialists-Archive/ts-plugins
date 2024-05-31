@@ -20,7 +20,7 @@ public ARP_Init()
 
 public EventHudRender(Name[],Data[],Len)
 {
-	if(Data[1] != HUD_PRIM)
+	if(!is_user_alive(Data[0]) || Data[1] != HUD_PRIM)
 		return
 	
 	new id = Data[0]
@@ -41,7 +41,6 @@ public EventHudRender(Name[],Data[],Len)
 		ARP_AddHudItem(id,HUD_PRIM,0,"SERVER MALFUNCTIONING:")
 		ARP_AddHudItem(id,HUD_PRIM,0,"Your account will not be saved.")
 	}
-	else if(!is_user_alive(id)) ARP_AddHudItem(id,HUD_PRIM,0,"You are currently dead/spectating...")
 	else if(!ARP_PlayerReady(id)) ARP_AddHudItem(id,HUD_PRIM,0,"Please wait while your account is loaded...")
 	else
 	{

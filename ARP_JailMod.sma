@@ -36,7 +36,7 @@ new g_Died[33]
 
 new g_Flag
 
-new g_Cuffed[33]
+new Float:g_MaxSpeed[33]
 
 //new g_PluginEnd
 
@@ -46,8 +46,8 @@ new g_Cuffs
 
 enum MODS
 {
-	HL = 0,
-	TS
+	TS = 0,
+	SC
 }
 
 new MODS:g_Mod
@@ -57,9 +57,9 @@ public plugin_init()
 	register_event("ResetHUD","EventResetHUD","be")
 	register_event("DeathMsg","EventDeathMsg","a")
 	
-	if(module_exists("tsfun") || module_exists("tsx")) g_Mod = TS
+	if(module_exists("tsfun")) g_Mod = TS
 	// No such module
-	else /*if(module_exists("svencoop")*/ g_Mod = HL
+	else /*if(module_exists("svencoop")*/ g_Mod = SC
 }
 
 public SaveData()
@@ -69,8 +69,6 @@ public SaveData()
 	
 	for(new Count;Count < Playersnum;Count++)
 		if(g_Class[Players[Count]] != Invalid_Class) ARP_ClassSave(g_Class[Players[Count]])
-		
-	set_task(get_pcvar_float(p_SaveTime),"SaveData")
 }
 
 public plugin_natives()
@@ -81,7 +79,7 @@ public plugin_natives()
 
 public ModuleFilter(const Module[])
 {
-    if(equali(Module,"tsfun") || equali(Module,"tsx") || equali(Module,"xstats"))
+    if(equali(Module,"tsfun"))
         return PLUGIN_HANDLED
 	
     return PLUGIN_CONTINUE
@@ -205,13 +203,12 @@ public EventCuffed(Name[],Data[],Len)
 	
 	if(!Cuffed)
 	{
-		ARP_SetUserSpeed(Index,Speed_None)
+		entity_set_float(Index,EV_FL_maxspeed,g_MaxSpeed[Index])
+		g_MaxSpeed[Index] = 0.0
 		
 		set_rendering(Index,kRenderFxNone,255,255,255,kRenderNormal,16)
 		
 		ARP_ClassSetInt(g_Class[Index],"cuff",0)
-		
-		g_Cuffed[Index] = 0
 		
 		if(id)
 		{
@@ -252,9 +249,7 @@ public EventCuffed(Name[],Data[],Len)
 	
 	set_rendering(Index,kRenderFxGlowShell,255,0,0,kRenderNormal,16)
 	
-	ARP_SetUserSpeed(Index,Speed_Mul,0.5)
-	
-	g_Cuffed[Index] = 1
+	g_MaxSpeed[Index] = entity_get_float(Index,EV_FL_maxspeed)
 	
 	if(id)
 	{
@@ -290,22 +285,24 @@ public EventHudRender(Name[],Data[],Len)
 	if(g_Class[id] && (Mode == 1 && Proximity(id)) || (Mode == 2 && IsJailed(id)))
 		ARP_AddHudItem(id,HUD_PRIM,0,"Jailed: No Salary")
 	
-	if(g_Cuffed[id])
+	if(g_MaxSpeed[id])
 		ARP_AddHudItem(id,HUD_PRIM,0,"Cuffed")
 }
 
 public ARP_Salary(id)
 {
 	new Mode = get_pcvar_num(p_Mode)
-	if(g_Class[id] && (Mode == 1 && Proximity(id)) || (Mode == 2 && IsJailed(id)) || g_Cuffed[id])
+	if(g_Class[id] && (Mode == 1 && Proximity(id)) || (Mode == 2 && IsJailed(id)) || g_MaxSpeed[id])
 		return PLUGIN_HANDLED
 		
 	return PLUGIN_CONTINUE
 }
 
 public client_PreThink(id)
-	if(g_Cuffed[id] && is_user_alive(id))
-	{		
+	if(g_MaxSpeed[id] && is_user_alive(id))
+	{
+		entity_set_float(id,EV_FL_maxspeed,g_MaxSpeed[id] / 2)
+		
 		// thanks to harbu for this part, although it's pretty easy to replicate
 		new bufferstop = entity_get_int(id,EV_INT_button)
 
@@ -322,9 +319,9 @@ public client_PreThink(id)
 			case TS :
 				if(ts_getuserwpn(id,Temp,Temp,Temp,Temp) != TSW_KUNG_FU)
 					engclient_cmd(id,"drop")
-			//case HL :
-			//	if(get_user_weapon(id) != _:SC_CROWBAR)
-			//		engclient_cmd(id,"drop")
+			case SC :
+				if(get_user_weapon(id) != _:SC_CROWBAR)
+					engclient_cmd(id,"drop")
 		}
 	}
 	
@@ -332,8 +329,8 @@ public ARP_Init()
 {	
 	ARP_RegisterPlugin("Jail Mod",ARP_VERSION,"The Apollo RP Team","Allows cops to jail players and provides cuffing")
 	
-	ARP_RegisterCmd("jailmodmenu","CmdJailMod","- brings up jailing menu")
-	ARP_RegisterCmd("jail","JailCommand","<jail #> - jails a target")
+	register_clcmd("jailmodmenu","CmdJailMod")
+	register_clcmd("jail","JailCommand")
 	
 	p_Reconnect = register_cvar("arp_jail_reconnect","1")
 	p_Death = register_cvar("arp_jail_death","1")
@@ -349,14 +346,12 @@ public ARP_Init()
 	
 	set_task(get_pcvar_float(p_SaveTime),"SaveData")
 	
-	register_menucmd(register_menuid(g_Menu),g_Keys,"MenuHandle")
-	
 	for(new Count;Count < 10;Count++)
 		g_Keys += (1<<Count)
 	
 	new File = ARP_FileOpen("jailmod.ini","r")
 	if(!File)
-		return ARP_ThrowError(0,0,"Could not open jailmod.ini file")
+		return set_fail_state("Could not open jail file")
 		
 	new Buffer[128],Left[33],Right[33],Origins[3][11]
 	while(!feof(File) && g_JailNum < MAX_JAILS)
@@ -397,6 +392,8 @@ public ARP_Init()
 	
 	fclose(File)
 	
+	register_menucmd(register_menuid(g_Menu),g_Keys,"MenuHandle")
+	
 	return PLUGIN_CONTINUE
 }
 
@@ -409,7 +406,7 @@ public EventDeathMsg()
 		return
 	
 	g_Died[id] = 0
-	g_Cuffed[id] = 0
+	g_MaxSpeed[id] = 0.0
 	
 	ARP_ClassSetInt(g_Class[id],"cuff",0)
 	
@@ -418,8 +415,6 @@ public EventDeathMsg()
 	
 	if(get_pcvar_num(p_Mode) == 1)
 		ARP_ClassSetInt(g_Class[id],"jail",Proximity(id))
-	
-	ARP_SetUserSpeed(id,Speed_None)
 }
 
 public JailCommand(id)
@@ -457,7 +452,7 @@ public client_disconnect(id)
 {	
 	g_MenuPage[id] = 0
 	g_Died[id] = 0
-	g_Cuffed[id] = 0
+	g_MaxSpeed[id] = 0.0
 	
 	if(g_Class[id]) 
 	{

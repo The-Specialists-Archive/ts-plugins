@@ -33,33 +33,29 @@
 */
 
 // Uncomment for SQL version
-// #define USING_SQL
+//#define USING_SQL
 
 #include <amxmodx>
 #include <amxmisc>
 #if defined USING_SQL
-#include <sqlx>
+#include <dbi>
 #endif
 
-//new Vector:AdminList;
+#define MAX_ADMINS 64
+#define PLUGINNAME	"AMX Mod X"
 
-new AdminCount;
-
-new PLUGINNAME[] = "AMX Mod X"
-
-#define ADMIN_LOOKUP	(1<<0)
-#define ADMIN_NORMAL	(1<<1)
+#define	ADMIN_LOOKUP	(1<<0)
+#define	ADMIN_NORMAL	(1<<1)
 #define ADMIN_STEAM		(1<<2)
 #define ADMIN_IPADDR	(1<<3)
-#define ADMIN_NAME		(1<<4)
+#define	ADMIN_NAME		(1<<4)
 
+new g_aPassword[MAX_ADMINS][32]
+new g_aName[MAX_ADMINS][32]
+new g_aFlags[MAX_ADMINS]
+new g_aAccess[MAX_ADMINS]
+new g_aNum = 0
 new g_cmdLoopback[16]
-new bool:g_CaseSensitiveName[33];
-
-// pcvars
-new amx_mode;
-new amx_password_field;
-new amx_default_access;
 
 public plugin_init()
 {
@@ -70,9 +66,9 @@ public plugin_init()
 #endif
 	register_dictionary("admin.txt")
 	register_dictionary("common.txt")
-	amx_mode=register_cvar("amx_mode", "1")
-	amx_password_field=register_cvar("amx_password_field", "_pw")
-	amx_default_access=register_cvar("amx_default_access", "")
+	register_cvar("amx_mode", "1")
+	register_cvar("amx_password_field", "_pw")
+	register_cvar("amx_default_access", "")
 
 	register_cvar("amx_vote_ratio", "0.02")
 	register_cvar("amx_vote_time", "10")
@@ -94,10 +90,9 @@ public plugin_init()
 	register_cvar("amx_sql_user", "root")
 	register_cvar("amx_sql_pass", "")
 	register_cvar("amx_sql_db", "amx")
-	register_cvar("amx_sql_type", "mysql")
 
 	register_concmd("amx_reloadadmins", "cmdReload", ADMIN_CFG)
-	register_concmd("amx_addadmin", "addadminfn", ADMIN_RCON, "<playername|auth> <accessflags> [password] [authtype] - add specified player as an admin to users.ini")
+	register_concmd("amx_addadmin", "addadminfn", ADMIN_RCON, "<playername|auth> <accessflags> [password] [authtype] - automatically add specified player as an admin to users.ini")
 
 	format(g_cmdLoopback, 15, "amxauth%c%c%c%c", random_num('A', 'Z'), random_num('A', 'Z'), random_num('A', 'Z'), random_num('A', 'Z'))
 
@@ -110,11 +105,6 @@ public plugin_init()
 	
 	server_cmd("exec %s/amxx.cfg", configsDir)	// Execute main configuration file
 	server_cmd("exec %s/sql.cfg", configsDir)
-
-	// Create a vector of 5 cells to store the info.
-	//AdminList=vector_create(5);
-
-	
 #if defined USING_SQL
 	server_cmd("amx_sqladmins")
 #else
@@ -122,10 +112,7 @@ public plugin_init()
 	loadSettings(configsDir)					// Load admins accounts
 #endif
 }
-public client_connect(id)
-{
-	g_CaseSensitiveName[id] = false;
-}
+
 public addadminfn(id, level, cid)
 {
 	if (!cmd_access(id, level, cid, 3))
@@ -133,7 +120,7 @@ public addadminfn(id, level, cid)
 		
 	new idtype = ADMIN_STEAM | ADMIN_LOOKUP
 
-	if (read_argc() >= 5)
+	if (read_argc() > 4)
 	{
 		new t_arg[16]
 		read_argv(4, t_arg, 15)
@@ -149,11 +136,8 @@ public addadminfn(id, level, cid)
 		else if (equali(t_arg, "name") || equali(t_arg, "nick"))
 		{
 			idtype = ADMIN_NAME
-			
-			if (equali(t_arg, "name"))
-				idtype |= ADMIN_LOOKUP
 		} else {
-			console_print(id, "[%s] Unknown id type ^"%s^", use one of: steamid, ip, name", PLUGINNAME, t_arg)
+			console_print(id, "[%s] Unknown idtype ^"%s^", use one of: steamid, ip, name", PLUGINNAME, t_arg)
 			return PLUGIN_HANDLED
 		}
 	}
@@ -167,37 +151,15 @@ public addadminfn(id, level, cid)
 		if (containi(arg, "STEAM_0:") == -1)
 		{
 			idtype |= ADMIN_LOOKUP
-			player = cmd_target(id, arg, CMDTARGET_ALLOW_SELF | CMDTARGET_NO_BOTS)
-		} else {
-			new _steamid[44]
-			static _players[32], _num, _pv
-			get_players(_players, _num)
-			for (new _i=0; _i<_num; _i++)
-			{
-				_pv = _players[_i]
-				get_user_authid(_pv, _steamid, sizeof(_steamid)-1)
-				if (!_steamid[0])
-					continue
-				if (equal(_steamid, arg))
-				{
-					player = _pv
-					break
-				}
-			}	
-			if (player < 1)
-			{
-				idtype &= ~ADMIN_LOOKUP
-			}		
+			player = cmd_target(id, arg, 10)
 		}
 	}
 	else if (idtype & ADMIN_NAME)
 	{
-		player = cmd_target(id, arg, CMDTARGET_ALLOW_SELF | CMDTARGET_NO_BOTS)
+		player = cmd_target(id, arg, 10)
 		
 		if (player)
 			idtype |= ADMIN_LOOKUP
-		else
-			idtype &= ~ADMIN_LOOKUP
 	}
 	else if (idtype & ADMIN_IPADDR)
 	{
@@ -237,14 +199,12 @@ public addadminfn(id, level, cid)
 	read_argv(2, flags, 63)
 
 	new password[64]
-	if (read_argc() >= 4)
+	if (read_argc() == 4)
 		read_argv(3, password, 63)
 
 	new auth[33]
-	new Comment[33]; // name of player to pass to comment field
 	if (idtype & ADMIN_LOOKUP)
 	{
-		get_user_name(player, Comment, sizeof(Comment)-1)
 		if (idtype & ADMIN_STEAM)
 		{
 			get_user_authid(player, auth, 32)
@@ -273,7 +233,7 @@ public addadminfn(id, level, cid)
 	else
 		len += format(type[len], 15-len, "e")
 	
-	AddAdmin(id, auth, flags, password, type, Comment)
+	AddAdmin(id, auth, flags, password, type)
 	cmdReload(id, ADMIN_CFG, 0)
 
 	if (player > 0)
@@ -286,15 +246,21 @@ public addadminfn(id, level, cid)
 	return PLUGIN_HANDLED
 }
 
-AddAdmin(id, auth[], accessflags[], password[], flags[], comment[]="")
+AddAdmin(id, auth[], accessflags[], password[], flags[])
 {
 #if defined USING_SQL
-	new error[128], errno
-
-	new Handle:info = SQL_MakeStdTuple()
-	new Handle:sql = SQL_Connect(info, errno, error, 127)
+	new host[64], user[32], pass[32], db[128], table[32], error[128], dbType[7]
 	
-	if (sql == Empty_Handle)
+	dbi_type(dbType, 6)
+	get_cvar_string("amx_sql_host", host, 63)
+	get_cvar_string("amx_sql_user", user, 31)
+	get_cvar_string("amx_sql_pass", pass, 31)
+	get_cvar_string("amx_sql_db", db, 127)
+	get_cvar_string("amx_sql_table", table, 31)
+
+	new Sql:sql = dbi_connect(host, user, pass, db, error, 127)
+	
+	if (sql <= SQL_FAILED)
 	{
 		server_print("[AMXX] %L", LANG_SERVER, "SQL_CANT_CON", error)
 		//backup to users.ini
@@ -336,154 +302,103 @@ AddAdmin(id, auth[], accessflags[], password[], flags[], comment[]="")
 		// If we came here, steamid doesn't exist in users.ini. Add it.
 		new linetoadd[512]
 		
-		if (comment[0]==0)
-		{
-			formatex(linetoadd, 511, "^r^n^"%s^" ^"%s^" ^"%s^" ^"%s^"", auth, password, accessflags, flags)
-		}
-		else
-		{
-			formatex(linetoadd, 511, "^r^n^"%s^" ^"%s^" ^"%s^" ^"%s^" ; %s", auth, password, accessflags, flags, comment)
-		}
+		format(linetoadd, 511, "^"%s^" ^"%s^" ^"%s^" ^"%s^"", auth, password, accessflags, flags)
 		console_print(id, "Adding:^n%s", linetoadd)
 
 		if (!write_file(configsDir, linetoadd))
 			console_print(id, "[%s] Failed writing to %s!", PLUGINNAME, configsDir)
 #if defined USING_SQL
 	}
-	
-	new table[32]
-	
-	get_cvar_string("amx_sql_table", table, 31)
-	
-	new Handle:query = SQL_PrepareQuery(sql, "SELECT * FROM `%s` WHERE (`auth` = '%s')", table, auth)
+	new Result:Res = dbi_query(sql, "SELECT * FROM `%s` WHERE (`auth` = '%s')", table, auth)
 
-	if (!SQL_Execute(query))
+	if (Res == RESULT_FAILED)
 	{
-		SQL_QueryError(query, error, 127)
+		dbi_error(sql, error, 127)
 		server_print("[AMXX] %L", LANG_SERVER, "SQL_CANT_LOAD_ADMINS", error)
 		console_print(id, "[AMXX] %L", LANG_SERVER, "SQL_CANT_LOAD_ADMINS", error)
-	} else if (SQL_NumResults(query)) {
-		console_print(id, "[%s] %s already exists!", PLUGINNAME, auth)
-	} else {
-		console_print(id, "Adding to database:^n^"%s^" ^"%s^" ^"%s^" ^"%s^"", auth, password, accessflags, flags)
-	
-		SQL_QueryAndIgnore(sql, "REPLACE INTO `%s` (`auth`, `password`, `access`, `flags`) VALUES ('%s', '%s', '%s', '%s')", table, auth, password, accessflags, flags)
+		dbi_close(sql)
+		
+		return
 	}
-	
-	SQL_FreeHandle(query)
-	SQL_FreeHandle(sql)
-	SQL_FreeHandle(info)
-#endif
+	else if (Res > RESULT_NONE)
+	{
+		console_print(id, "[%s] %s already exists!", PLUGINNAME, auth)
+		dbi_free_result(Res)
+		dbi_close(sql)
+		
+		return
+	}
 
+	console_print(id, "Adding to database:^n^"%s^" ^"%s^" ^"%s^" ^"%s^"", auth, password, accessflags, flags)
+	
+	dbi_query(sql, "REPLACE INTO `%s` (`auth`, `password`, `access`, `flags`) VALUES ('%s', '%s', '%s', '%s')", table, auth, password, accessflags, flags)
+	dbi_close(sql)
+#endif
 }
+
 public plugin_cfg()
 {
-	set_task(6.1, "delayed_load")
-}
+	new configFile[64], curMap[32]
 
-public delayed_load()
-{
-	new configFile[128], curMap[64], configDir[128]
+	get_configsdir(configFile, 31)
+	get_mapname(curMap, 31)
 
-	get_configsdir(configDir, sizeof(configDir)-1)
-	get_mapname(curMap, sizeof(curMap)-1)
-
-	new i=0;
-	
-	while (curMap[i] != '_' && curMap[i++] != '^0') {/*do nothing*/}
-	
-	if (curMap[i]=='_')
-	{
-		// this map has a prefix
-		curMap[i]='^0';
-		formatex(configFile, sizeof(configFile)-1, "%s/maps/prefix_%s.cfg", configDir, curMap);
-
-		if (file_exists(configFile))
-		{
-			server_cmd("exec %s", configFile);
-		}
-	}
-
-	get_mapname(curMap, sizeof(curMap)-1)
-
-	
-	formatex(configFile, sizeof(configFile)-1, "%s/maps/%s.cfg", configDir, curMap)
+	new len = format(configFile, 63, "%s/maps/%s.cfg", configFile, curMap)
 
 	if (file_exists(configFile))
-	{
-		server_cmd("exec %s", configFile)
-	}
-	
+		set_task(6.1, "delayed_load", 0, configFile, len + 1)
+}
+
+public delayed_load(configFile[])
+{
+	server_cmd("exec %s", configFile)
 }
 
 loadSettings(szFilename[])
 {
-	new File=fopen(szFilename,"r");
+	if (!file_exists(szFilename))
+		return 0
+
+	new szText[256], szFlags[32], szAccess[32]
+	new a, pos = 0
+
+	while (g_aNum < MAX_ADMINS && read_file(szFilename, pos++, szText, 255, a))
+	{
+		if (szText[0] == ';')
+			continue
+
+		if (parse(szText, g_aName[g_aNum], 31, g_aPassword[g_aNum], 31, szAccess, 31, szFlags, 31) < 2)
+			continue
+
+		g_aAccess[g_aNum] = read_flags(szAccess)
+		g_aFlags[g_aNum] = read_flags(szFlags)
+		++g_aNum
+	}
 	
-	if (File)
-	{
-		new Text[512];
-		new Flags[32];
-		new Access[32]
-		new AuthData[44];
-		new Password[32];
-		
-		while (!feof(File))
-		{
-			fgets(File,Text,sizeof(Text)-1);
-			
-			trim(Text);
-			
-			// comment
-			if (Text[0]==';') 
-			{
-				continue;
-			}
-			
-			Flags[0]=0;
-			Access[0]=0;
-			AuthData[0]=0;
-			Password[0]=0;
-			
-			// not enough parameters
-			if (parse(Text,AuthData,sizeof(AuthData)-1,Password,sizeof(Password)-1,Access,sizeof(Access)-1,Flags,sizeof(Flags)-1) < 2)
-			{
-				continue;
-			}
-			
-			admins_push(AuthData,Password,read_flags(Access),read_flags(Flags));
-
-			AdminCount++;
-		}
-		
-		fclose(File);
-	}
-
-	if (AdminCount == 1)
-	{
-		server_print("[AMXX] %L", LANG_SERVER, "LOADED_ADMIN");
-	}
+	if (g_aNum == 1)
+		server_print("[AMXX] %L", LANG_SERVER, "LOADED_ADMIN")
 	else
-	{
-		server_print("[AMXX] %L", LANG_SERVER, "LOADED_ADMINS", AdminCount);
-	}
-	
-	return 1;
+		server_print("[AMXX] %L", LANG_SERVER, "LOADED_ADMINS", g_aNum)
+
+	return 1
 }
 
 #if defined USING_SQL
 public adminSql()
 {
-	new table[32], error[128], type[12], errno
+	new host[64], user[32], pass[32], db[128], table[32], error[128], dbType[7]
 	
-	new Handle:info = SQL_MakeStdTuple()
-	new Handle:sql = SQL_Connect(info, errno, error, 127)
+	dbi_type(dbType, 6)
 	
+	get_cvar_string("amx_sql_host", host, 63)
+	get_cvar_string("amx_sql_user", user, 31)
+	get_cvar_string("amx_sql_pass", pass, 31)
+	get_cvar_string("amx_sql_db", db, 127)
 	get_cvar_string("amx_sql_table", table, 31)
+
+	new Sql:sql = dbi_connect(host, user, pass, db, error, 127)
 	
-	SQL_GetAffinity(type, 11)
-	
-	if (sql == Empty_Handle)
+	if (sql <= SQL_FAILED)
 	{
 		server_print("[AMXX] %L", LANG_SERVER, "SQL_CANT_CON", error)
 		
@@ -497,68 +412,63 @@ public adminSql()
 		return PLUGIN_HANDLED
 	}
 
-	new Handle:query
+	new Result:Res
 	
-	if (equali(type, "sqlite"))
+	if (equali(dbType, "sqlite"))
 	{
-		if (!sqlite_TableExists(sql, table))
+		if (!sqlite_table_exists(sql, table))
 		{
-			SQL_QueryAndIgnore(sql, "CREATE TABLE %s ( auth TEXT NOT NULL DEFAULT '', password TEXT NOT NULL DEFAULT '', access TEXT NOT NULL DEFAULT '', flags TEXT NOT NULL DEFAULT '' )", table)
+			dbi_query(sql, "CREATE TABLE %s ( auth TEXT NOT NULL DEFAULT '', password TEXT NOT NULL DEFAULT '', access TEXT NOT NULL DEFAULT '', flags TEXT NOT NULL DEFAULT '' )", table)
 		}
 
-		query = SQL_PrepareQuery(sql, "SELECT auth, password, access, flags FROM %s", table)
+		Res = dbi_query(sql, "SELECT auth, password, access, flags FROM %s",table)
 	} else {
-		SQL_QueryAndIgnore(sql, "CREATE TABLE IF NOT EXISTS `%s` ( `auth` VARCHAR( 32 ) NOT NULL, `password` VARCHAR( 32 ) NOT NULL, `access` VARCHAR( 32 ) NOT NULL, `flags` VARCHAR( 32 ) NOT NULL ) COMMENT = 'AMX Mod X Admins'", table)
-		query = SQL_PrepareQuery(sql,"SELECT `auth`,`password`,`access`,`flags` FROM `%s`", table)
+		dbi_query(sql,"CREATE TABLE IF NOT EXISTS `%s` ( `auth` VARCHAR( 32 ) NOT NULL, `password` VARCHAR( 32 ) NOT NULL, `access` VARCHAR( 32 ) NOT NULL, `flags` VARCHAR( 32 ) NOT NULL ) COMMENT = 'AMX Mod X Admins'", table)
+		Res = dbi_query(sql,"SELECT `auth`,`password`,`access`,`flags` FROM `%s`", table)
 	}
 
-	if (!SQL_Execute(query))
+	if (Res == RESULT_FAILED)
 	{
-		SQL_QueryError(query, error, 127)
+		dbi_error(sql, error, 127)
 		server_print("[AMXX] %L", LANG_SERVER, "SQL_CANT_LOAD_ADMINS", error)
-	} else if (!SQL_NumResults(query)) {
-		server_print("[AMXX] %L", LANG_SERVER, "NO_ADMINS")
-	} else {
+		dbi_free_result(Res)
+		dbi_close(sql)
 		
-		AdminCount = 0
-		
-		/** do this incase people change the query order and forget to modify below */
-		new qcolAuth = SQL_FieldNameToNum(query, "auth")
-		new qcolPass = SQL_FieldNameToNum(query, "password")
-		new qcolAccess = SQL_FieldNameToNum(query, "access")
-		new qcolFlags = SQL_FieldNameToNum(query, "flags")
-		
-		new AuthData[44];
-		new Password[44];
-		new Access[32];
-		new Flags[32];
-		
-		while (SQL_MoreResults(query))
-		{
-			SQL_ReadResult(query, qcolAuth, AuthData, sizeof(AuthData)-1);
-			SQL_ReadResult(query, qcolPass, Password, sizeof(Password)-1);
-			SQL_ReadResult(query, qcolAccess, Access, sizeof(Access)-1);
-			SQL_ReadResult(query, qcolFlags, Flags, sizeof(Flags)-1);
-	
-			admins_push(AuthData,Password,read_flags(Access),read_flags(Flags));
-	
-			++AdminCount;
-			SQL_NextRow(query)
-		}
-	
-		if (AdminCount == 1)
-		{
-			server_print("[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMIN")
-		}
-		else
-		{
-			server_print("[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMINS", AdminCount)
-		}
-		
-		SQL_FreeHandle(query)
-		SQL_FreeHandle(sql)
-		SQL_FreeHandle(info)
+		return PLUGIN_HANDLED
 	}
+	else if (Res == RESULT_NONE)
+	{
+		server_print("[AMXX] %L", LANG_SERVER, "NO_ADMINS")
+		dbi_free_result(Res)
+		dbi_close(sql)
+		
+		return PLUGIN_HANDLED
+	}
+
+	new szFlags[32], szAccess[32]
+	
+	g_aNum = 0
+	
+	while (dbi_nextrow(Res) > 0)
+	{
+		dbi_result(Res, "auth", g_aName[g_aNum], 31)
+		dbi_result(Res, "password", g_aPassword[g_aNum], 31)
+		dbi_result(Res, "access", szAccess, 31)
+		dbi_result(Res, "flags", szFlags, 31)
+
+		g_aAccess[g_aNum] = read_flags(szAccess)
+
+		g_aFlags[g_aNum] = read_flags(szFlags)
+		++g_aNum
+	}
+
+	if (g_aNum == 1)
+		server_print("[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMIN")
+	else
+		server_print("[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMINS", g_aNum)
+	
+	dbi_free_result(Res)
+	dbi_close(sql)
 	
 	return PLUGIN_HANDLED
 }
@@ -571,8 +481,6 @@ public cmdReload(id, level, cid)
 
 	//strip original flags (patch submitted by mrhunt)
 	remove_user_flags(0, read_flags("z"))
-	
-	admins_flush();
 
 #if !defined USING_SQL
 	new filename[128]
@@ -580,42 +488,28 @@ public cmdReload(id, level, cid)
 	get_configsdir(filename, 127)
 	format(filename, 63, "%s/users.ini", filename)
 
-	AdminCount = 0;
-	loadSettings(filename);		// Re-Load admins accounts
+	g_aNum = 0
+	loadSettings(filename)		// Re-Load admins accounts
 
 	if (id != 0)
 	{
-		if (AdminCount == 1)
-		{
-			console_print(id, "[AMXX] %L", LANG_SERVER, "LOADED_ADMIN");
-		}
+		if (g_aNum == 1)
+			console_print(id, "[AMXX] %L", LANG_SERVER, "LOADED_ADMIN")
 		else
-		{
-			console_print(id, "[AMXX] %L", LANG_SERVER, "LOADED_ADMINS", AdminCount);
-		}
+			console_print(id, "[AMXX] %L", LANG_SERVER, "LOADED_ADMINS", g_aNum)
 	}
 #else
-	AdminCount = 0
+	g_aNum = 0
 	adminSql()
 
 	if (id != 0)
 	{
-		if (AdminCount == 1)
+		if (g_aNum == 1)
 			console_print(id, "[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMIN")
 		else
-			console_print(id, "[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMINS", AdminCount)
+			console_print(id, "[AMXX] %L", LANG_SERVER, "SQL_LOADED_ADMINS", g_aNum)
 	}
 #endif
-
-	new players[32], num, pv
-	new name[32]
-	get_players(players, num)
-	for (new i=0; i<num; i++)
-	{
-		pv = players[i]
-		get_user_name(pv, name, 31)
-		accessUser(pv, name)
-	}
 
 	return PLUGIN_HANDLED
 }
@@ -625,140 +519,91 @@ getAccess(id, name[], authid[], ip[], password[])
 	new index = -1
 	new result = 0
 	
-	static Count;
-	static Flags;
-	static Access;
-	static AuthData[44];
-	static Password[32];
-	
-	g_CaseSensitiveName[id] = false;
-
-	Count=admins_num();
-	for (new i = 0; i < Count; ++i)
+	for (new i = 0; i < g_aNum; ++i)
 	{
-		Flags=admins_lookup(i,AdminProp_Flags);
-		admins_lookup(i,AdminProp_Auth,AuthData,sizeof(AuthData)-1);
-		
-		if (Flags & FLAG_AUTHID)
+		if (g_aFlags[i] & FLAG_AUTHID)
 		{
-			if (equal(authid, AuthData))
+			if (equal(authid, g_aName[i]))
 			{
 				index = i
 				break
 			}
 		}
-		else if (Flags & FLAG_IP)
+		else if (g_aFlags[i] & FLAG_IP)
 		{
-			new c = strlen(AuthData)
+			new c = strlen(g_aName[i])
 			
-			if (AuthData[c - 1] == '.')		/* check if this is not a xxx.xxx. format */
+			if (g_aName[i][c - 1] == '.')		/* check if this is not a xxx.xxx. format */
 			{
-				if (equal(AuthData, ip, c))
+				if (equal(g_aName[i], ip, c))
 				{
 					index = i
 					break
 				}
 			}									/* in other case an IP must just match */
-			else if (equal(ip, AuthData))
+			else if (equal(ip, g_aName[i]))
 			{
 				index = i
 				break
 			}
-		} 
-		else 
-		{
-			if (Flags & FLAG_CASE_SENSITIVE)
+		} else {
+			if (g_aFlags[i] & FLAG_TAG)
 			{
-				if (Flags & FLAG_TAG)
-				{
-					if (contain(name, AuthData) != -1)
-					{
-						index = i
-						g_CaseSensitiveName[id] = true
-						break
-					}
-				}
-				else if (equal(name, AuthData))
+				if (contain(name, g_aName[i]) != -1)
 				{
 					index = i
-					g_CaseSensitiveName[id] = true
 					break
 				}
 			}
-			else
+			else if (equal(name, g_aName[i]))
 			{
-				if (Flags & FLAG_TAG)
-				{
-					if (containi(name, AuthData) != -1)
-					{
-						index = i
-						break
-					}
-				}
-				else if (equali(name, AuthData))
-				{
-					index = i
-					break
-				}
+				index = i
+				break
 			}
 		}
 	}
 
 	if (index != -1)
 	{
-		Access=admins_lookup(index,AdminProp_Access);
-
-		if (Flags & FLAG_NOPASS)
+		if (g_aFlags[index] & FLAG_NOPASS)
 		{
 			result |= 8
 			new sflags[32]
 			
-			get_flags(Access, sflags, 31)
-			set_user_flags(id, Access)
+			get_flags(g_aAccess[index], sflags, 31)
+			set_user_flags(id, g_aAccess[index])
 			
-			log_amx("Login: ^"%s<%d><%s><>^" became an admin (account ^"%s^") (access ^"%s^") (address ^"%s^")", name, get_user_userid(id), authid, AuthData, sflags, ip)
+			log_amx("Login: ^"%s<%d><%s><>^" became an admin (account ^"%s^") (access ^"%s^") (address ^"%s^")", name, get_user_userid(id), authid, g_aName[index], sflags, ip)
 		}
-		else 
+		else if (equal(password, g_aPassword[index]))
 		{
-		
-			admins_lookup(index,AdminProp_Password,Password,sizeof(Password)-1);
-
-			if (equal(password, Password))
+			result |= 12
+			set_user_flags(id, g_aAccess[index])
+			
+			new sflags[32]
+			get_flags(g_aAccess[index], sflags, 31)
+			
+			log_amx("Login: ^"%s<%d><%s><>^" became an admin (account ^"%s^") (access ^"%s^") (address ^"%s^")", name, get_user_userid(id), authid, g_aName[index], sflags, ip)
+		} else {
+			result |= 1
+			
+			if (g_aFlags[index] & FLAG_KICK)
 			{
-				result |= 12
-				set_user_flags(id, Access)
-				
-				new sflags[32]
-				get_flags(Access, sflags, 31)
-				
-				log_amx("Login: ^"%s<%d><%s><>^" became an admin (account ^"%s^") (access ^"%s^") (address ^"%s^")", name, get_user_userid(id), authid, AuthData, sflags, ip)
-			} 
-			else 
-			{
-				result |= 1
-				
-				if (Flags & FLAG_KICK)
-				{
-					result |= 2
-					log_amx("Login: ^"%s<%d><%s><>^" kicked due to invalid password (account ^"%s^") (address ^"%s^")", name, get_user_userid(id), authid, AuthData, ip)
-				}
+				result |= 2
+				log_amx("Login: ^"%s<%d><%s><>^" kicked due to invalid password (account ^"%s^") (address ^"%s^")", name, get_user_userid(id), authid, g_aName[index], ip)
 			}
 		}
 	}
-	else if (get_pcvar_float(amx_mode) == 2.0)
+	else if (get_cvar_float("amx_mode") == 2.0)
 	{
 		result |= 2
-	} 
-	else 
-	{
+	} else {
 		new defaccess[32]
 		
-		get_pcvar_string(amx_default_access, defaccess, 31)
+		get_cvar_string("amx_default_access", defaccess, 31)
 		
 		if (!strlen(defaccess))
-		{
 			copy(defaccess, 32, "z")
-		}
 		
 		new idefaccess = read_flags(defaccess)
 		
@@ -782,23 +627,17 @@ accessUser(id, name[] = "")
 	get_user_authid(id, userauthid, 31)
 	
 	if (name[0])
-	{
 		copy(username, 31, name)
-	}
 	else
-	{
 		get_user_name(id, username, 31)
-	}
 	
-	get_pcvar_string(amx_password_field, passfield, 31)
+	get_cvar_string("amx_password_field", passfield, 31)
 	get_user_info(id, passfield, password, 31)
 	
 	new result = getAccess(id, username, userauthid, userip, password)
 	
 	if (result & 1)
-	{
 		client_cmd(id, "echo ^"* %L^"", id, "INV_PAS")
-	}
 	
 	if (result & 2)
 	{
@@ -807,60 +646,42 @@ accessUser(id, name[] = "")
 	}
 	
 	if (result & 4)
-	{
 		client_cmd(id, "echo ^"* %L^"", id, "PAS_ACC")
-	}
 	
 	if (result & 8)
-	{
 		client_cmd(id, "echo ^"* %L^"", id, "PRIV_SET")
-	}
 	
 	return PLUGIN_CONTINUE
 }
 
 public client_infochanged(id)
 {
-	if (!is_user_connected(id) || !get_pcvar_num(amx_mode))
-	{
+	if (!is_user_connected(id) || !get_cvar_num("amx_mode"))
 		return PLUGIN_CONTINUE
-	}
 
 	new newname[32], oldname[32]
 	
 	get_user_name(id, oldname, 31)
 	get_user_info(id, "name", newname, 31)
 
-	if (g_CaseSensitiveName[id])
-	{
-		if (!equal(newname, oldname))
-		{
-			accessUser(id, newname)
-		}
-	}
-	else
-	{
-		if (!equali(newname, oldname))
-		{
-			accessUser(id, newname)
-		}
-	}
+	if (!equal(newname, oldname))
+		accessUser(id, newname)
+
 	return PLUGIN_CONTINUE
 }
 
 public ackSignal(id)
 {
 	server_cmd("kick #%d ^"%L^"", get_user_userid(id), id, "NO_ENTRY")
-	return PLUGIN_HANDLED
 }
 
 public client_authorized(id)
-	return get_pcvar_num(amx_mode) ? accessUser(id) : PLUGIN_CONTINUE
+	return get_cvar_num("amx_mode") ? accessUser(id) : PLUGIN_CONTINUE
 
 public client_putinserver(id)
 {
 	if (!is_dedicated_server() && id == 1)
-		return get_pcvar_num(amx_mode) ? accessUser(id) : PLUGIN_CONTINUE
+		return get_cvar_num("amx_mode") ? accessUser(id) : PLUGIN_CONTINUE
 	
 	return PLUGIN_CONTINUE
 }

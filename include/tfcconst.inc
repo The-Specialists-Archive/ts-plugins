@@ -69,8 +69,3 @@ enum {
 	TFC_PC_CIVILIAN,
 };
 
-// Goal items
-#define TFC_GOALITEM_BLUE   (1 << 17)
-#define TFC_GOALITEM_RED    (1 << 18)
-#define TFC_GOALITEM_YELLOW (1 << 24)
-#define TFC_GOALITEM_GREEN  (1 << 25)

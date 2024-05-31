@@ -18,9 +18,6 @@
 #include <file>
 #include <vault>
 #include <lang>
-#include <messages>
-#include <vector>
-#include <sorting>
 
 /* Function is called just after server activation.
 * Good place for configuration loading, commands and cvars registration. */
@@ -75,9 +72,6 @@ native precache_model(const name[]);
 
 /* Precache sound. Can be used only in plugin_precache() function.*/
 native precache_sound(const name[]);
-
-/* Precaches any file. */
-native precache_generic(szFile[]);
 
 /* Sets info for player. */
 native set_user_info(index,const info[],const value[]);
@@ -200,14 +194,9 @@ native is_linux_server();
 /* Returns 1 or 0. */
 native is_jit_enabled();
 
-/* Returns AMXX's version string of the current gameserver */
-native get_amxx_verstring(buffer[], length);
-
 /* If player is not attacked function returns 0, in other
- * case returns index of attacking player. On second and third
- * parameter you may get info about weapon and body hit place.
- * As of 1.75, get_user_attacker can return a non-player index if the player was attacked by a non-player entity. 
- */
+* case returns index of attacking player. On second and third
+* parameter you may get info about weapon and body hit place. */
 native get_user_attacker(index,...);
 
 /* If player doesn't hit at anything function returns 0.0,
@@ -223,6 +212,9 @@ native get_user_armor(index);
 
 /* Returns player deaths. */
 native get_user_deaths(index);
+
+/* Sets player deaths. */
+native set_user_deaths(index, newdeaths);
 
 /* Returns player health. */
 native get_user_health(index);
@@ -268,17 +260,7 @@ native get_user_ping(index, &ping, &loss);
 native get_user_origin(index, origin[3], mode = 0);
 
 /* Returns all carried weapons as bit sum. Gets
- *  also theirs indexes.
- * Note that num is incremental - if you pass 0, you get
- *  32 weapons towards the total.  Afterwards, num will 
- *  will contain the number of weapons retrieved.
- * However, subsequent calls to get_user_weapons() will
- *  return the next batch of weapons, in case the mod 
- *  supports more than 32 weapons.
- * This means to call get_user_weapons() on the same
- *  inputs twice, you must reset num to 0 to get the
- *  original output again.
- */
+* also theirs indexes. */
 native get_user_weapons(index,weapons[32],&num);
 
 /* Returns weapon name. */
@@ -326,7 +308,6 @@ native get_playersnum(flag=0);
 * "e" - match with team.
 * "f" - match with part of name.
 * "g" - ignore case sensitivity.
-* "h" - skip HLTV.
 * Example: Get all alive CTs: get_players(players,num,"ae","CT") */
 native get_players(players[32], &num ,const flags[]="", const team[]="");
 
@@ -473,20 +454,29 @@ native get_user_flags(index,id=0);
 /* Removes flags for player. */
 native remove_user_flags(index,flags=-1,id=0);
 
-/* Registers function which will be called from client console. 
- * Returns the command ID.
- */
+/* Registers function which will be called from client console. */
 native register_clcmd(const client_cmd[],const function[],flags=-1, info[]="");
 
-/* Registers function which will be called from any console. 
- * Returns the command ID.
- */
+/* Registers function which will be called from any console. */
 native register_concmd(const cmd[],const function[],flags=-1, info[]="");
 
-/* Registers function which will be called from server console. 
- * Returns the command ID.
- */
+/* Registers function which will be called from server console. */
 native register_srvcmd(const server_cmd[],const function[],flags=-1, info[]="");
+
+/* These functinos are used to generate client messages.
+* You may generate menu, smoke, shockwaves, thunderlights,
+* intermission and many many others messages.
+* See HL SDK for more examples. */
+native message_begin( dest, msg_type, origin[3]={0,0,0},player=0);
+native message_end();
+native write_byte( x );
+native write_char( x );
+native write_short( x );
+native write_long( x );
+native write_entity( x );
+native write_angle( x );
+native write_coord( x );
+native write_string( x[] );
 
 /* Gets info about client command. */
 native get_clcmd(index, command[], len1, &flags, info[], len2, flag);
@@ -505,17 +495,8 @@ then function returns only server cmds, if positive then
 returns only client cmds. in other case returns all console commands. */
 native get_concmd(index,cmd[],len1,&flags, info[],len2, flag, id = -1);
 
-/* Gets the parent plugin id of a console command. */
-native get_concmd_plid(cid, flag_mask, id_type);
-
 /* Returns number of registered console commands. */
 native get_concmdsnum(flag,id = -1);
-
-/* Returns the number of plugin-registered cvars. */
-native get_plugins_cvarsnum();
-
-/* Returns information about a plugin-registered cvar. */
-native get_plugins_cvar(num, name[], namelen, &flags=0, &plugin_id=0, &pcvar_handle=0);
 
 /* Gets unique id of menu. Outside set to 1 allows
 * to catch menus outside a plugin where register_menuid is called. */
@@ -535,6 +516,9 @@ native server_exec();
 
 /* Emits sound. Sample must be precached. */
 native emit_sound(index, channel, sample[], Float:vol, Float:att,flags, pitch);
+
+/* Returns distance between two vectors. */
+native get_distance(origin1[3],origin2[3]);
 
 /* Registers new cvar for HL engine.
  * Returns the cvar pointer for get/set_pcvar functions.
@@ -605,10 +589,8 @@ native get_modulesnum();
 native is_plugin_loaded(const name[]);
 
 /* Gets info about plugin by given index.
- * Function returns -1 if plugin doesn't exist with given index. 
- * Note: the [...] portion should not be used, and is only for backward compatibility.
- */
-native get_plugin(index,filename[],len1,name[],len2,version[],len3,author[],len4,status[],len5,...);
+* Function returns -1 if plugin doesn't exist with given index. */
+native get_plugin(index,filename[],len1,name[],len2,version[],len3,author[],len4,status[],len5);
 
 /* Returns number of all loaded plugins. */
 native get_pluginsnum();
@@ -662,22 +644,12 @@ native callfunc_begin_i(func, plugin = -1);
 */
 native get_func_id(const funcName[], pluginId = -1);
 
-/* Push a parameter (integer, string, float)
- * Note that none of these values are const.
- * Anything pushed by intrf, floatrf, array, or str
- *  can be modified by the called function.
- */
+/* Push a parameter (integer, string, float) */
 native callfunc_push_int(value);
+native callfunc_push_str(const VALUE[]);
 native callfunc_push_float(Float: value);
 native callfunc_push_intrf(&value);
 native callfunc_push_floatrf(& Float: value);
-
-/* If copyback is 1 (default), any changes are copied back.
- * Note that this will defy the 'const' specifier for push_str(), 
- *  which is only kept for special backwards compatibility.
- */
-native callfunc_push_str(const VALUE[], bool:copyback=true);
-native callfunc_push_array(VALUE[], array_size, bool:copyback=true);
 
 /* Make the actual call.
 * Return value of the function called. */
@@ -841,6 +813,9 @@ native menu_setprop(menu, prop, ...);
 //and the callback is invoked.
 native menu_cancel(player);
 
+// Gets distance between two origins (float)
+native Float:get_distance_f( Float:Origin1[3], Float:Origin2[3] ); 
+
 // Dispatches a client cvar query
 //  id: Player id
 //  cvar: cvar name
@@ -915,7 +890,7 @@ native dbg_fmt_error(buffer[], maxLength);
 native set_native_filter(const handler[]);
 
 /**
- * This function sets a module/library filter.  It will let you intercept the automatic requirement 
+ * This function sets a module filter.  It will let you intercept the automatic requirement 
  *  of a module and return PLUGIN_CONTINUE to fail load or PLUGIN_HANDLED to imply that load
  *  can continue even without the module.  
  * 
@@ -925,10 +900,8 @@ native set_native_filter(const handler[]);
  *
  * Your handler will be called with this prototype:
  *
- * public module_filter(const library[], LibType:type);
- *  library - library or class name of the module that is required
- *  libtype - The type of requirement being checked (library/module or class).
- * 
+ * public module_filter(const module[]);
+ *  module - logtag of the module required to load the plugin
  *
  * set_module_filter() returns 0 on success (unlike most natives).
  */
@@ -952,11 +925,6 @@ native abort(error, const fmt[]="", {Float,_}:...);
  *  module_exists("dbi")
  */
 native module_exists(const logtag[]);
-
-/**
- * Checks if a library/class is loaded.  This is the newer version of module_exists.
- */
-native LibraryExists(const library[], LibType:type);
 
 /**
  * Returns the next valid hudchannel for a user, from 1-4.
@@ -1022,25 +990,16 @@ native set_addr_val(addr, val);
 
 
 /**
- * Creates a multi-plugin forward.
- * Stop type must be one of the ET_ values in amxconst.inc
+ * creates a multi-plugin forward.
  * results will be > 0 for success
  */
 native CreateMultiForward(const name[], stop_type, ...);
 
 /**
- * Creates a multi-forward plugin that can filter between old/new plugins.
- * Old plugins are used by the AMX Mod backwards compatibility layer.
- * Stop type must be one of the ET_ values in amxconst.inc
- * Forward type must be one of the FORWARD_ values in amxconst.inc.
- */
-native CreateMultiForwardEx(const name[], stop_type, forward_type, ...);
-
-/**
- * Creates a forward for one plugin.
- * Results will be > 0 for success.
- * id should be an id such as returned by find_plugin_byfile.
- * Unlike get_plugin(), negative numbers will not work.
+ * creates a forward for one plugin.
+ * results will be > 0 for success
+ * id can be returned from find_plugin_byfile or
+ * anything get_plugin is compatible with.
  */
 native CreateOneForward(plugin_id, const name[], ...);
 
@@ -1054,7 +1013,7 @@ native PrepareArray(array[], size, copyback=0);
  * executes a forward.  returns result in ret.
  * returns 1 for success, 0 for failure.
  */
-native ExecuteForward(forward_handle, &ret, {Float,_}:...);
+native ExecuteForward(forward_handle, &ret, ...);
 
 /**
  * Destroys/deallocates any type of forward
@@ -1084,12 +1043,3 @@ native get_pcvar_string(pcvar, string[], maxlen);
  * Sets a whole array to a certain value.
  */
 native arrayset(array[], value, size);
-
-/**
- * Returns the weapon id, otherwise 0 when no id found.
- * The weapon name is case sensitive, and has the weapon_* form.
- */
-native get_weaponid(const name[]);
-
-// Keep this always at the bottom of this file
-#include <message_stocks>

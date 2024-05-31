@@ -17,15 +17,7 @@
 #endif
 #define _dbi_included
 
-// You can't include SQLX first!
-// there's really no reason to anyway.
-#assert !defined _sqlx_included
-
-#if AMXX_VERSION_NUM >= 175
- #pragma reqclass dbi
-#else
- #pragma library dbi
-#endif
+#pragma library dbi
 
 enum Sql
 {

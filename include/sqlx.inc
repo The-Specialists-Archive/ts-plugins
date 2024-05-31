@@ -59,7 +59,36 @@ native Handle:SQL_Connect(Handle:cn_tuple, &errcode, error[], maxlength);
  * The query must always be freed.
  * This does not actually do the query!
  */
-native Handle:SQL_PrepareQuery(Handle:db, const fmt[], {Float,_}:...);
+native Handle:SQL_PrepareQuery(Handle:db, const fmt[], any:...);
+
+
+/**
+ * Back-quotes characters in a string for database querying.
+ * Note: The buffer's maximum size should be 2*strlen(string) to catch
+ * all scenarios.
+ *
+ * @param db				Database handle, for localization.
+ * @param buffer			Buffer to copy to.
+ * @param buflen			Maximum size of the buffer.
+ * @param string			String to backquote (should not overlap buffer).
+ * @return					Length of new string, or -1 on failure.
+ */
+native SQL_QuoteString(Handle:db, buffer[], buflen, const string[]);
+
+/**
+ * Back-quotes characters in a string for database querying.
+ * Note: The buffer's maximum size should be 2*strlen(string) to catch
+ * all scenarios.
+ *
+ * @param db				Database handle, for localization.
+ * @param buffer			Buffer to copy to.
+ * @param buflen			Maximum size of the buffer.
+ * @param fmt				Format of string to backquote (should not overlap buffer).
+ * @param ...				Format arguments.
+ * @return					Length of new string, or -1 on failure.
+ */
+native SQL_QuoteStringFmt(Handle:db, buffer[], buflen, const fmt[], any:...);
+
 
 #define TQUERY_CONNECT_FAILED	-2
 #define TQUERY_QUERY_FAILED	-1
@@ -177,6 +206,12 @@ native SQL_FieldNameToNum(Handle:query, const name[]);
 
 
 /**
+ * Rewinds a result set to the first row.
+ */
+native SQL_Rewind(Handle:query);
+
+
+/**
  * Returns the insert id of the last INSERT query. 
  * Returns 0 otherwise.
  */
@@ -213,6 +248,20 @@ native SQL_SetAffinity(const driver[]);
 native SQL_GetQueryString(Handle:query, buffer[], maxlength);
 
 /**
+ * For queries which return multiple result sets, this advances to the next 
+ * result set if one is available.  Otherwise, the current result set is 
+ * destroyed and will no longer be accessible.
+ *
+ * This function will always return false on SQLite, and when using threaded 
+ * queries in MySQL.  Nonetheless, it has the same effect of removing the last 
+ * result set.
+ *
+ * @param query		Query Handle.
+ * @return			True on success, false on failure.
+ */
+native bool:SQL_NextResultSet(Handle:query);
+
+/**
  * This function can be used to find out if a table in a Sqlite database exists.
  * (updated for newer API)
  */
@@ -245,88 +294,88 @@ stock SQL_SimpleQuery(Handle:db, const query[], error[]="", maxlength=0, &rows=0
 	if (!SQL_Execute(hQuery))
 	{
 		SQL_QueryError(hQuery, error, maxlength);
-		SQL_FreeHandle(hQuery)
+		SQL_FreeHandle(hQuery);
 		return 0;
 	}
 	
-	rows = SQL_NumResults(hQuery)
+	rows = SQL_NumResults(hQuery);
 	
 	SQL_FreeHandle(hQuery);
 	
-	return 1
+	return 1;
 }
 
 /**
  * Use this for executing a query where you don't care about the result.
  * Returns 0 on failure, 1 on success
  */
-stock SQL_SimpleQueryFmt(Handle:db, error[]="", maxlength=0, &rows=0, const fmt[], ...)
+stock SQL_SimpleQueryFmt(Handle:db, error[]="", maxlength=0, &rows=0, const fmt[], any:...)
 {
 	static query_buf[2048];
-	vformat(query_buf, 2047, fmt, 6)
+	vformat(query_buf, 2047, fmt, 6);
 	
 	new Handle:hQuery = SQL_PrepareQuery(db, "%s", query_buf);
 	
 	if (!SQL_Execute(hQuery))
 	{
 		SQL_QueryError(hQuery, error, maxlength);
-		SQL_FreeHandle(hQuery)
+		SQL_FreeHandle(hQuery);
 		return 0;
 	}
 	
-	rows = SQL_NumResults(hQuery)
+	rows = SQL_NumResults(hQuery);
 	
 	SQL_FreeHandle(hQuery);
 	
-	return 1
+	return 1;
 }
 
 /**
  * Use this for executing a query and not caring about the error.
  * Returns -1 on error, >=0 on success (with number of affected rows)
  */
-stock SQL_QueryAndIgnore(Handle:db, const queryfmt[], {Float,_}:...)
+stock SQL_QueryAndIgnore(Handle:db, const queryfmt[], any:...)
 {
-	static query[4096]
-	new Handle:hQuery
-	new ret
+	static query[4096];
+	new Handle:hQuery;
+	new ret;
 	
-	vformat(query, sizeof(query)-1, queryfmt, 3)
+	vformat(query, sizeof(query)-1, queryfmt, 3);
 	
 	hQuery = SQL_PrepareQuery(db, "%s", query);
 	
 	if (SQL_Execute(hQuery))
 	{
-		ret = SQL_AffectedRows(hQuery)
+		ret = SQL_AffectedRows(hQuery);
 	} else {
-		ret = -1
+		ret = -1;
 	}
 	
-	SQL_FreeHandle(hQuery)
+	SQL_FreeHandle(hQuery);
 	
-	return ret
+	return ret;
 }
 
-stock Handle:SQL_MakeStdTuple()
+stock Handle:SQL_MakeStdTuple(timeout = 0)
 {
-	static host[64], user[32], pass[32], db[128]
-	static get_type[12], set_type[12]
+	static host[64], user[32], pass[32], db[128];
+	static get_type[12], set_type[12];
 	
-	get_cvar_string("amx_sql_host", host, 63)
-	get_cvar_string("amx_sql_user", user, 31)
-	get_cvar_string("amx_sql_pass", pass, 31)
-	get_cvar_string("amx_sql_type", set_type, 11)
-	get_cvar_string("amx_sql_db", db, 127)
+	get_cvar_string("amx_sql_host", host, 63);
+	get_cvar_string("amx_sql_user", user, 31);
+	get_cvar_string("amx_sql_pass", pass, 31);
+	get_cvar_string("amx_sql_type", set_type, 11);
+	get_cvar_string("amx_sql_db", db, 127);
 	
-	SQL_GetAffinity(get_type, 11)
+	SQL_GetAffinity(get_type, 12);
 	
 	if (!equali(get_type, set_type))
 	{
 		if (!SQL_SetAffinity(set_type))
 		{
-			log_amx("Failed to set affinity from %s to %s.", get_type, set_type)
+			log_amx("Failed to set affinity from %s to %s.", get_type, set_type);
 		}
 	}
 	
-	return SQL_MakeDbTuple(host, user, pass, db)
+	return SQL_MakeDbTuple(host, user, pass, db, timeout);
 }

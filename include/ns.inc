@@ -9,14 +9,7 @@
 #endif
 #define NS_INC	
 
-#if AMXX_VERSION_NUM >= 175
- #pragma reqlib ns
- #if !defined AMXMODX_NOAUTOLOAD
-  #pragma loadlib ns
- #endif
-#else
- #pragma library ns
-#endif
+#pragma library ns
 
 
 #include <ns_const>

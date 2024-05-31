@@ -12,16 +12,20 @@ public plugin_init()
 	register_plugin("SQLX Test", "1.0", "BAILOPAN")
 	register_srvcmd("sqlx_test_normal", "SqlxTest_Normal")
 	register_srvcmd("sqlx_test_thread", "SqlxTest_Thread")
+	register_srvcmd("sqlx_test_proc", "SqlxTest_Proc")
 	register_srvcmd("sqlx_test_old1", "SqlxTest_Old1")
 	register_srvcmd("sqlx_test_old2", "SqlxTest_Old2")
 	register_srvcmd("sqlx_test_thread_end", "SqlxTest_ThreadEnd")
 	register_srvcmd("sqlx_test_bad", "SqlxTest_Bad")
+	register_srvcmd("sqlx_test_quote", "SqlxTest_Quote")
+	register_srvcmd("sqlx_test_affinity", "SqlxTest_Affinity")
 	
 	new configsDir[64]
 	get_configsdir(configsDir, 63)
 	
 	server_cmd("exec %s/sql.cfg", configsDir)
-	server_exec()
+	
+	set_task(2.0, "start_map")
 }
 
 DoBasicInfo(affinities=0)
@@ -54,12 +58,12 @@ DoBasicInfo(affinities=0)
 			wanted_type,
 			res ? "Success" : "Failed")
 		SQL_GetAffinity(affinity, 11)
-		plugin_cfg()
+		start_map()
 		server_print("Verification: %s", affinity)
 	}
 }
 
-public plugin_cfg()
+public start_map()
 {
 	new host[64]
 	new user[64]
@@ -144,6 +148,16 @@ public GetMyStuff(failstate, Handle:query, error[], errnum, data[], size, Float:
 	}
 }
 
+public SqlxTest_Affinity()
+{
+	server_print("[Access Manager] try SetAffinity to sqlite");
+	SQL_SetAffinity("sqlite");
+	server_print("[Access Manager] try SetAffinity to mysql");
+	SQL_SetAffinity("mysql");
+	server_print("[Access Manager] try SetAffinity to sqlite again");
+	SQL_SetAffinity("sqlite");
+}
+
 /**
  * Starts a threaded query.
  */
@@ -161,6 +175,63 @@ public SqlxTest_Thread()
 	SQL_ThreadQuery(g_DbInfo, "GetMyStuff", query, data, 1)
 	
 	g_QueryNum++
+}
+
+/**
+ * Tests string quoting
+ */
+public SqlxTest_Quote()
+{
+	DoBasicInfo(1)
+	
+	new errno, error[255]
+	
+	new Handle:db = SQL_Connect(g_DbInfo, errno, error, sizeof(error)-1)
+	if (!db)
+	{
+		server_print("Query failure: [%d] %s", errno, error)
+		return
+	}
+	
+	new buffer[500], num
+	num = SQL_QuoteString(db, buffer, sizeof(buffer)-1, "Hi y'all! C\lam")
+	
+	server_print("num: %d str: %s", num, buffer)
+	
+	SQL_FreeHandle(db)
+}
+
+public SqlxTest_Proc()
+{
+	new errnum, error[255]
+	
+	DoBasicInfo(1)
+	
+	new Handle:db = SQL_Connect(g_DbInfo, errnum, error, 254)
+	if (!db)
+	{
+		server_print("Query failure: [%d] %s", errnum, error)
+		return
+	}
+	
+	new Handle:query = SQL_PrepareQuery(db, "CALL ExampleProc()")
+	if (!SQL_Execute(query))
+	{
+		errnum = SQL_QueryError(query, error, 254)
+		server_print("Query failure: [%d] %s", errnum, error)
+		SQL_FreeHandle(query)
+		SQL_FreeHandle(db)
+		return
+	}
+
+	PrintQueryData(query)	
+	
+	server_print("Next result: %d", SQL_NextResultSet(query));
+	
+	PrintQueryData(query)
+	
+	SQL_FreeHandle(query)
+	SQL_FreeHandle(db)
 }
 
 /**
@@ -190,6 +261,8 @@ public SqlxTest_Normal()
 	}
 
 	PrintQueryData(query)	
+	
+	server_print("Next result: %d", SQL_NextResultSet(query));
 	
 	SQL_FreeHandle(query)
 	SQL_FreeHandle(db)

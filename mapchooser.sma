@@ -35,12 +35,11 @@
 #include <amxmodx>
 #include <amxmisc>
 
+#define MAX_MAPS    128
 #define SELECTMAPS  5
 
-#define charsof(%1) (sizeof(%1)-1)
-
-new Array:g_mapName;
-new g_mapNums;
+new g_mapName[MAX_MAPS][32]
+new g_mapNums
 
 new g_nextName[SELECTMAPS]
 new g_voteCount[SELECTMAPS + 2]
@@ -56,8 +55,6 @@ public plugin_init()
 	register_plugin("Nextmap Chooser", AMXX_VERSION_STR, "AMXX Dev Team")
 	register_dictionary("mapchooser.txt")
 	register_dictionary("common.txt")
-	
-	g_mapName=ArrayCreate(32);
 	
 	new MenuName[64]
 	
@@ -82,7 +79,6 @@ public plugin_init()
 		set_task(15.0, "voteNextmap", 987456, "", 0, "b")
 
 	g_coloredMenus = colored_menus()
-	
 }
 
 public checkVotes()
@@ -92,10 +88,8 @@ public checkVotes()
 	for (new a = 0; a < g_mapVoteNum; ++a)
 		if (g_voteCount[b] < g_voteCount[a])
 			b = a
-
 	
-	if (g_voteCount[SELECTMAPS] > g_voteCount[b]
-	    && g_voteCount[SELECTMAPS] > g_voteCount[SELECTMAPS+1])
+	if (g_voteCount[SELECTMAPS] > g_voteCount[b])
 	{
 		new mapname[32]
 		
@@ -108,13 +102,10 @@ public checkVotes()
 		return
 	}
 	
-	new smap[32]
 	if (g_voteCount[b] && g_voteCount[SELECTMAPS + 1] <= g_voteCount[b])
-	{
-		ArrayGetString(g_mapName, g_nextName[b], smap, charsof(smap));
-		set_cvar_string("amx_nextmap", smap);
-	}
-
+		set_cvar_string("amx_nextmap", g_mapName[g_nextName[b]])
+	
+	new smap[32]
 	
 	get_cvar_string("amx_nextmap", smap, 31)
 	client_print(0, print_chat, "%L", LANG_PLAYER, "CHO_FIN_NEXT", smap)
@@ -131,11 +122,7 @@ public countVote(id, key)
 		if (key == SELECTMAPS)
 			client_print(0, print_chat, "%L", LANG_PLAYER, "CHOSE_EXT", name)
 		else if (key < SELECTMAPS)
-		{
-			new map[32];
-			ArrayGetString(g_mapName, g_nextName[key], map, charsof(map));
-			client_print(0, print_chat, "%L", LANG_PLAYER, "X_CHOSE_X", name, map);
-		}
+			client_print(0, print_chat, "%L", LANG_PLAYER, "X_CHOSE_X", name, g_mapName[g_nextName[key]])
 	}
 	++g_voteCount[key]
 	
@@ -188,7 +175,6 @@ public voteNextmap()
 	g_selected = true
 	
 	new menu[512], a, mkeys = (1<<SELECTMAPS + 1)
-
 	new pos = format(menu, 511, g_coloredMenus ? "\y%L:\w^n^n" : "%L:^n^n", LANG_SERVER, "CHOOSE_NEXTM")
 	new dmax = (g_mapNums > SELECTMAPS) ? SELECTMAPS : g_mapNums
 	
@@ -200,7 +186,7 @@ public voteNextmap()
 			if (++a >= g_mapNums) a = 0
 		
 		g_nextName[g_mapVoteNum] = a
-		pos += format(menu[pos], 511, "%d. %a^n", g_mapVoteNum + 1, ArrayGetStringHandle(g_mapName, a));
+		pos += format(menu[pos], 511, "%d. %s^n", g_mapVoteNum + 1, g_mapName[a])
 		mkeys |= (1<<g_mapVoteNum)
 		g_voteCount[g_mapVoteNum] = 0
 	}
@@ -228,35 +214,6 @@ public voteNextmap()
 	client_cmd(0, "spk Gman/Gman_Choose2")
 	log_amx("Vote: Voting for the nextmap started")
 }
-stock bool:ValidMap(mapname[])
-{
-	if ( is_map_valid(mapname) )
-	{
-		return true;
-	}
-	// If the is_map_valid check failed, check the end of the string
-	new len = strlen(mapname) - 4;
-	
-	// The mapname was too short to possibly house the .bsp extension
-	if (len < 0)
-	{
-		return false;
-	}
-	if ( equali(mapname[len], ".bsp") )
-	{
-		// If the ending was .bsp, then cut it off.
-		// the string is byref'ed, so this copies back to the loaded text.
-		mapname[len] = '^0';
-		
-		// recheck
-		if ( is_map_valid(mapname) )
-		{
-			return true;
-		}
-	}
-	
-	return false;
-}
 
 loadSettings(filename[])
 {
@@ -264,36 +221,17 @@ loadSettings(filename[])
 		return 0
 
 	new szText[32]
+	new a, pos = 0
 	new currentMap[32]
-	
-	new buff[256];
 	
 	get_mapname(currentMap, 31)
 
-	new fp=fopen(filename,"r");
-	
-	while (!feof(fp))
+	while ((g_mapNums < MAX_MAPS) && read_file(filename, pos++, szText, 31, a))
 	{
-		buff[0]='^0';
-		szText[0]='^0';
-		
-		fgets(fp, buff, charsof(buff));
-		
-		parse(buff, szText, charsof(szText));
-		
-		
-		if (szText[0] != ';' &&
-			ValidMap(szText) &&
-			!equali(szText, g_lastMap) &&
-			!equali(szText, currentMap))
-		{
-			ArrayPushString(g_mapName, szText);
-			++g_mapNums;
-		}
-		
+		if (szText[0] != ';' && parse(szText, g_mapName[g_mapNums], 31) && is_map_valid(g_mapName[g_mapNums]) 
+			&& !equali(g_mapName[g_mapNums], g_lastMap) && !equali(g_mapName[g_mapNums], currentMap))
+			++g_mapNums
 	}
-	
-	fclose(fp);
 
 	return g_mapNums
 }
